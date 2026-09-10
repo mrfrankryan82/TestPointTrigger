@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <!-- net48's default LangVersion is C# 7.3; this app uses C# 8/9 syntax
+         (using declarations, tuple deconstruction, "is not" patterns). -->
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>TestPointTrigger</RootNamespace>
+    <AssemblyName>TestPointTrigger</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+
+    <!-- Shown in the app's footer/credit line and Help dialog — bump this
+         (and the date below) whenever a meaningful change ships. -->
+    <Version>1.0.0</Version>
+    <Company>HaKDMoDz™</Company>
+    <Product>TestPoint Trigger</Product>
+
+    <!--
+      Force a real 64-bit process. pnputil.exe only lives in
+      C:\Windows\System32 on 64-bit Windows; a 32-bit (WOW64) process gets
+      silently redirected to SysWOW64 and can fail to find/execute it.
+      If you're on 32-bit Windows, change this to x86 and it will still work.
+    -->
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Management" />
+  </ItemGroup>
+
+  <!--
+    Status icons (enabled = green, disabled = red) used for the taskbar/title
+    bar icon, the tray "status notifier" icon, and the toggle button image.
+    Copied next to the built exe so MainForm can load them at runtime.
+  -->
+  <ItemGroup>
+    <None Include="Assets\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

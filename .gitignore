@@ -1,0 +1,37 @@
+# Visual Studio / .NET build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio files
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+# NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+
+# Build results / test output
+[Tt]est[Rr]esult*/
+BenchmarkDotNet.Artifacts/
+
+# Rider / ReSharper
+.idea/
+*.DotSettings.user
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Publish output
+[Pp]ublish/
+*.publishsettings

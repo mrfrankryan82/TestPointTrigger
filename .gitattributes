@@ -1,0 +1,10 @@
+# Auto detect text files and normalize line endings to LF in the repo,
+# checked out as CRLF on Windows (standard .NET/VS convention).
+* text=auto eol=crlf
+
+# Binary assets — never diff/normalize these
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.wav binary
