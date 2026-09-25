@@ -1,423 +1,457 @@
+// TestPoint Trigger - PCB Pad Finder
+// Developer: HaKDMoDz™ · v2.0.0 · 2026-09-23
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Management;
-using System.Media;
-using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using OpenCvSharp;
+using CvRect = OpenCvSharp.Rect;
+using Point = System.Drawing.Point;
+using Size = System.Drawing.Size;
 
 namespace TestPointTrigger
 {
     public partial class MainForm : Form
     {
-        internal const string RepoUrl = "https://github.com/mrfrankryan82/TestPointTrigger";
+        public const string AppVersion = "3.0.0";
+        public const string BuildDate = "2026-09-26";
+        public static readonly string Credit = $"Developer: HaKDMoDz™ · v{AppVersion} · {BuildDate}";
 
-        // Played once the hub is successfully re-enabled (the "go" trigger),
-        // so you get an audible confirmation without having to look at the
-        // screen while your hands are on the test point.
-        private const string EnabledSoundPath = @"C:\Users\User\Downloads\hardware_inserted\hardware_inserted.wav";
-        private SoundPlayer _enabledSound;
+        enum Mode { Pan, Edit, Crop }
 
-        // ---- Global hotkeys (work even when this window isn't focused,
-        // e.g. while both hands are busy holding tweezers + a battery clip) ----
-        private const int WM_HOTKEY = 0x0312;
-        private const int HOTKEY_ID_ENABLE = 0xB001;
-        private const int HOTKEY_ID_DISABLE = 0xB002;
-        private const uint MOD_CONTROL = 0x0002;
-        private const uint MOD_ALT = 0x0001;
-        private const uint VK_E = 0x45;
-        private const uint VK_D = 0x44;
+        // state
+        Mat _mat; Bitmap _bmp; string _path;
+        List<Pad> _detected = new List<Pad>(), _manual = new List<Pad>(), _pads = new List<Pad>();
+        readonly List<PointF> _suppressed = new List<PointF>();
+        readonly Stack<(List<Pad> m, List<PointF> s)> _undo = new Stack<(List<Pad>, List<PointF>)>();
+        Rectangle? _crop; Rectangle? _cropDrag; Point _dragStart; bool _panning; PointF _panOrigin;
+        float _zoom = 1f; PointF _off; Mode _mode = Mode.Edit; int _sel = -1;
+        readonly DetectorSettings _ds = new DetectorSettings();
+        readonly RenderOptions _ro = new RenderOptions();
+        int _detectGen;
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        private readonly Timer _countdownTimer = new Timer { Interval = 1000 };
-        private int _secondsRemaining;
-        private string _armedDeviceId;
-        private string _armedDeviceName;
-
-        // Devices this app has disabled and not yet re-enabled. Tracked so
-        // "Re-enable All" and the close-time safety check never leave a
-        // hub/controller stuck off.
-        private readonly HashSet<string> _disabledBySession = new HashSet<string>();
-
-        // Status icons (enabled = green, disabled = red) — used for the
-        // window/taskbar icon, the tray "status notifier" icon, and the
-        // toggle button image. Loaded from Assets\ next to the exe.
-        private static readonly string AssetsDir = Path.Combine(AppContext.BaseDirectory, "Assets");
-        private Icon _iconEnabled;
-        private Icon _iconDisabled;
-        private Image _imgEnabled;
-        private Image _imgDisabled;
+        // controls
+        readonly CanvasPanel _canvas = new CanvasPanel();
+        readonly ToolStripStatusLabel _status = new ToolStripStatusLabel { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+        readonly ListView _list = new ListView { View = View.Details, FullRowSelect = true, HideSelection = false, Dock = DockStyle.Fill };
+        readonly ToolStripButton _bPan = new ToolStripButton("✋ Pan"), _bEdit = new ToolStripButton("✚ Edit pads"), _bCrop = new ToolStripButton("⬚ Crop to board");
+        readonly ToolStripComboBox _style = new ToolStripComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
+        readonly NumericUpDown _labelSize = new NumericUpDown { Minimum = 4, Maximum = 60, DecimalPlaces = 1, Increment = 0.5M, Value = 11 };
+        readonly NumericUpDown _upscale = new NumericUpDown { Minimum = 1, Maximum = 6, DecimalPlaces = 1, Increment = 0.5M, Value = 3 };
+        readonly Timer _debounce = new Timer { Interval = 350 };
 
         public MainForm()
         {
-            InitializeComponent();
-            _countdownTimer.Tick += CountdownTimer_Tick;
-            LoadStatusIcons();
-            footerLabel.Text = AppInfo.FooterText;
+            Text = $"TestPoint Trigger — PCB Pad Finder  v{AppVersion}";
+            Size = new Size(1400, 900); StartPosition = FormStartPosition.CenterScreen;
+            Font = new Font("Segoe UI", 9f); KeyPreview = true; AllowDrop = true;
+            BuildUi();
+            SetMode(Mode.Edit);
+            _debounce.Tick += (s, e) => { _debounce.Stop(); RunDetect(); };
+            DragEnter += (s, e) => { if (e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy; };
+            DragDrop += (s, e) => { var f = (string[])e.Data.GetData(DataFormats.FileDrop); if (f?.Length > 0) LoadImage(f[0]); };
+            KeyDown += OnKey;
+            SetStatus("Open or drop a motherboard photo (Ctrl+O / Ctrl+V). Crop to the board, then fine-tune.");
         }
 
-        private void LoadStatusIcons()
+        // ───────────────────────────── UI ─────────────────────────────
+        void BuildUi()
         {
+            var menu = new MenuStrip();
+            var file = new ToolStripMenuItem("&File");
+            file.DropDownItems.Add(Mi("&Open image…", () => OpenImage(), Keys.Control | Keys.O));
+            file.DropDownItems.Add(Mi("&Paste image", () => PasteImage(), Keys.Control | Keys.V));
+            file.DropDownItems.Add(new ToolStripSeparator());
+            file.DropDownItems.Add(Mi("Export labelled &PNG…", () => ExportPng(), Keys.Control | Keys.S));
+            file.DropDownItems.Add("Export &CSV checklist…", null, (s, e) => ExportCsv());
+            file.DropDownItems.Add(new ToolStripSeparator());
+            file.DropDownItems.Add("E&xit", null, (s, e) => Close());
+            var edit = new ToolStripMenuItem("&Edit");
+            edit.DropDownItems.Add(Mi("&Undo", () => Undo(), Keys.Control | Keys.Z));
+            edit.DropDownItems.Add("Clear &manual edits", null, (s, e) => { PushUndo(); _manual.Clear(); _suppressed.Clear(); Rebuild(); });
+            edit.DropDownItems.Add("Clear c&rop", null, (s, e) => { _crop = null; RunDetect(); });
+            var help = new ToolStripMenuItem("&Help");
+            help.DropDownItems.Add("&How to use", null, (s, e) => ShowHelp());
+            help.DropDownItems.Add("&About", null, (s, e) => MessageBox.Show(this,
+                $"TestPoint Trigger — PCB Pad Finder\nVersion {AppVersion} ({BuildDate})\n\nDeveloper: HaKDMoDz™\n\nFinds gold and white/tinned test pads on motherboard photos and labels them for elimination probing.",
+                "About", MessageBoxButtons.OK, MessageBoxIcon.Information));
+            menu.Items.AddRange(new ToolStripItem[] { file, edit, help });
+
+            var tools = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, ImageScalingSize = new Size(20, 20) };
+            tools.Items.Add(new ToolStripButton("📂 Open", null, (s, e) => OpenImage()));
+            tools.Items.Add(new ToolStripButton("🔍 Detect", null, (s, e) => RunDetect()));
+            tools.Items.Add(new ToolStripSeparator());
+            _bPan.Click += (s, e) => SetMode(Mode.Pan); _bEdit.Click += (s, e) => SetMode(Mode.Edit); _bCrop.Click += (s, e) => SetMode(Mode.Crop);
+            tools.Items.AddRange(new ToolStripItem[] { _bPan, _bEdit, _bCrop, new ToolStripSeparator() });
+            tools.Items.Add(new ToolStripLabel("Style:"));
+            _style.Items.AddRange(new object[] { "Labels only", "Circles + labels" }); _style.SelectedIndex = 0;
+            _style.SelectedIndexChanged += (s, e) => { _ro.Style = _style.SelectedIndex == 0 ? MarkStyle.LabelsOnly : MarkStyle.CirclesAndLabels; _canvas.Invalidate(); };
+            tools.Items.Add(_style);
+            tools.Items.Add(new ToolStripSeparator());
+            tools.Items.Add(new ToolStripButton("⤢ Fit", null, (s, e) => FitView()));
+            tools.Items.Add(new ToolStripButton("↶ Undo", null, (s, e) => Undo()));
+            tools.Items.Add(new ToolStripButton("💾 Export PNG", null, (s, e) => ExportPng()));
+            tools.Items.Add(new ToolStripButton("📄 Export CSV", null, (s, e) => ExportCsv()));
+
+            var statusStrip = new StatusStrip();
+            statusStrip.Items.Add(_status);
+            statusStrip.Items.Add(new ToolStripStatusLabel(Credit) { ForeColor = Color.DimGray });
+
+            // right panel
+            var side = new Panel { Dock = DockStyle.Right, Width = 300, Padding = new Padding(8) };
+            var tbl = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1 };
+            AddHeader(tbl, "Detection");
+            AddSlider(tbl, "Min pad size", 5, 200, 25, v => _ds.MinAreaFrac = v * 1e-6, v => $"{v * 1e-6:0.0e0}");
+            AddSlider(tbl, "Max pad size", 100, 5000, 1000, v => _ds.MaxAreaFrac = v * 1e-6, v => $"{v * 1e-6:0.0e0}");
+            AddSlider(tbl, "Roundness (circularity)", 40, 95, 78, v => _ds.CircMin = v / 100.0, v => (v / 100.0).ToString("0.00"));
+            AddSlider(tbl, "Shield-metal rejection", 20, 100, 55, v => _ds.IsoMax = v / 100.0, v => (v / 100.0).ToString("0.00"));
+            AddSlider(tbl, "Bezel-text rejection", 0, 120, 50, v => _ds.DarkSurroundV = v, v => v.ToString());
+            AddSlider(tbl, "Screw-hole rejection", 30, 95, 68, v => _ds.DonutRatio = v / 100.0, v => (v / 100.0).ToString("0.00"));
+            var cbRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
+            var cbGold = new CheckBox { Text = "Gold pads", Checked = true, AutoSize = true };
+            var cbWhite = new CheckBox { Text = "White/tinned pads", Checked = true, AutoSize = true };
+            cbGold.CheckedChanged += (s, e) => { _ds.DetectGold = cbGold.Checked; Queue(); };
+            cbWhite.CheckedChanged += (s, e) => { _ds.DetectWhite = cbWhite.Checked; Queue(); };
+            cbRow.Controls.AddRange(new Control[] { cbGold, cbWhite }); tbl.Controls.Add(cbRow);
+
+            AddHeader(tbl, "Labels & export");
+            tbl.Controls.Add(LabeledRow("Label size (px)", _labelSize));
+            tbl.Controls.Add(LabeledRow("Export upscale ×", _upscale));
+            _labelSize.ValueChanged += (s, e) => { _ro.LabelPx = (float)_labelSize.Value; _canvas.Invalidate(); };
+            var colorBtn = new Button { Text = "Label colour…", AutoSize = true };
+            colorBtn.Click += (s, e) => { using (var cd = new ColorDialog { Color = _ro.LabelColor }) if (cd.ShowDialog(this) == DialogResult.OK) { _ro.LabelColor = cd.Color; _canvas.Invalidate(); } };
+            var reset = new Button { Text = "Reset defaults", AutoSize = true };
+            reset.Click += (s, e) => { if (MessageBox.Show(this, "Reset detection sliders to skill defaults?", "Reset", MessageBoxButtons.YesNo) == DialogResult.Yes) ResetSliders(tbl); };
+            var btnRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill }; btnRow.Controls.AddRange(new Control[] { colorBtn, reset });
+            tbl.Controls.Add(btnRow);
+            AddHeader(tbl, "Pads (click to locate)");
+
+            _list.Columns.Add("#", 40); _list.Columns.Add("X", 60); _list.Columns.Add("Y", 60); _list.Columns.Add("Source", 90);
+            _list.SelectedIndexChanged += (s, e) => { _sel = _list.SelectedIndices.Count > 0 ? _list.SelectedIndices[0] : -1; if (_sel >= 0) CenterOn(_pads[_sel]); _canvas.Invalidate(); };
+            var listHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 4, 0, 0) }; listHost.Controls.Add(_list);
+            side.Controls.Add(listHost); side.Controls.Add(tbl);
+
+            _canvas.Dock = DockStyle.Fill; _canvas.BackColor = Color.FromArgb(24, 24, 28);
+            _canvas.Paint += PaintCanvas; _canvas.MouseDown += CanvasDown; _canvas.MouseMove += CanvasMove; _canvas.MouseUp += CanvasUp;
+            _canvas.MouseWheel += CanvasWheel; _canvas.Resize += (s, e) => _canvas.Invalidate();
+
+            Controls.Add(_canvas); Controls.Add(side); Controls.Add(tools); Controls.Add(menu); Controls.Add(statusStrip);
+            MainMenuStrip = menu;
+        }
+
+        static ToolStripMenuItem Mi(string t, Action a, Keys k) => new ToolStripMenuItem(t, null, (s, e) => a()) { ShortcutKeys = k };
+
+        readonly List<(TrackBar tb, int def)> _sliders = new List<(TrackBar, int)>();
+        void AddHeader(TableLayoutPanel t, string text) =>
+            t.Controls.Add(new Label { Text = text, Font = new Font(Font, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 10, 0, 2) });
+
+        void AddSlider(TableLayoutPanel t, string name, int min, int max, int def, Action<int> apply, Func<int, string> fmt)
+        {
+            var lbl = new Label { AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
+            var tb = new TrackBar { Minimum = min, Maximum = max, Value = def, TickStyle = TickStyle.None, Width = 270, Height = 28, AutoSize = false };
+            tb.ValueChanged += (s, e) => { apply(tb.Value); lbl.Text = $"{name}: {fmt(tb.Value)}"; Queue(); };
+            apply(def); lbl.Text = $"{name}: {fmt(def)}";
+            t.Controls.Add(lbl); t.Controls.Add(tb); _sliders.Add((tb, def));
+        }
+
+        void ResetSliders(TableLayoutPanel t) { foreach (var (tb, def) in _sliders) tb.Value = def; }
+
+        static Control LabeledRow(string text, Control c)
+        {
+            var p = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
+            c.Width = 70; p.Controls.Add(new Label { Text = text, AutoSize = true, Width = 150, Margin = new Padding(0, 6, 8, 0) }); p.Controls.Add(c);
+            return p;
+        }
+
+        void SetMode(Mode m)
+        {
+            _mode = m; _bPan.Checked = m == Mode.Pan; _bEdit.Checked = m == Mode.Edit; _bCrop.Checked = m == Mode.Crop;
+            _canvas.Cursor = m == Mode.Pan ? Cursors.Hand : Cursors.Cross;
+            SetStatus(m == Mode.Edit ? "Edit: left-click adds a pad (snaps to centre) · right-click removes · wheel zooms · middle-drag pans"
+                    : m == Mode.Crop ? "Crop: drag a rectangle around the board (exclude battery label and bezel)"
+                    : "Pan: drag to move · wheel zooms");
+        }
+
+        void SetStatus(string s) => _status.Text = s;
+
+        // ─────────────────────────── Image I/O ───────────────────────────
+        void OpenImage()
+        {
+            using (var d = new OpenFileDialog { Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff;*.webp|All files|*.*" })
+                if (d.ShowDialog(this) == DialogResult.OK) LoadImage(d.FileName);
+        }
+
+        void PasteImage()
+        {
+            if (!Clipboard.ContainsImage()) { SetStatus("Clipboard has no image."); return; }
+            using (var img = Clipboard.GetImage()) using (var ms = new MemoryStream())
+            {
+                img.Save(ms, ImageFormat.Png);
+                LoadBytes(ms.ToArray(), "pasted.png");
+            }
+        }
+
+        void LoadImage(string path)
+        {
+            try { LoadBytes(File.ReadAllBytes(path), path); }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Could not open image", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        void LoadBytes(byte[] data, string path)
+        {
+            // ImDecode applies EXIF orientation (phone photos); display bitmap is built from the same Mat so coords match.
+            var m = Cv2.ImDecode(data, ImreadModes.Color);
+            if (m == null || m.Empty()) throw new InvalidDataException("Unsupported or corrupt image.");
+            Cv2.ImEncode(".png", m, out byte[] png);
+            _mat?.Dispose(); _bmp?.Dispose();
+            _mat = m; _bmp = new Bitmap(new MemoryStream(png)); _path = path;
+            _detected.Clear(); _manual.Clear(); _suppressed.Clear(); _undo.Clear(); _crop = null; _sel = -1;
+            Text = $"TestPoint Trigger — {Path.GetFileName(path)}  v{AppVersion}";
+            FitView(); RunDetect();
+        }
+
+        // ─────────────────────────── Detection ───────────────────────────
+        void Queue() { if (_mat != null) { _debounce.Stop(); _debounce.Start(); } }
+
+        async void RunDetect()
+        {
+            if (_mat == null) return;
+            int gen = ++_detectGen; var ds = _ds.Clone(); var mat = _mat;
+            CvRect? roi = _crop.HasValue ? new CvRect(_crop.Value.X, _crop.Value.Y, _crop.Value.Width, _crop.Value.Height) : (CvRect?)null;
+            SetStatus("Detecting…"); UseWaitCursor = true;
             try
             {
-                _iconEnabled = new Icon(Path.Combine(AssetsDir, "status-enabled.ico"));
-                _iconDisabled = new Icon(Path.Combine(AssetsDir, "status-disabled.ico"));
-                _imgEnabled = Image.FromFile(Path.Combine(AssetsDir, "status-enabled.png"));
-                _imgDisabled = Image.FromFile(Path.Combine(AssetsDir, "status-disabled.png"));
+                var res = await Task.Run(() => PadDetector.Detect(mat, ds, roi));
+                if (gen != _detectGen) return;
+                _detected = res; Rebuild();
+                SetStatus($"{_pads.Count} candidate pads ({_detected.Count} detected, {_manual.Count} manual, {_suppressed.Count} removed).");
             }
-            catch (Exception ex)
+            catch (Exception ex) { SetStatus("Detection failed: " + ex.Message); }
+            finally { UseWaitCursor = false; }
+        }
+
+        void Rebuild()
+        {
+            var det = _detected.Where(p => !_suppressed.Any(s => Dist(s, p) <= Math.Max(p.R, 3) + 2)).ToList();
+            var all = PadDetector.Dedupe(det.Concat(_manual).ToList());
+            var rs = all.Select(p => p.R).OrderBy(r => r).ToList();
+            double band = rs.Count > 0 ? Math.Max(10, rs[rs.Count / 2] * 3) : 30;
+            _pads = PadDetector.Order(all, band);
+            _list.BeginUpdate(); _list.Items.Clear();
+            for (int i = 0; i < _pads.Count; i++)
+                _list.Items.Add(new ListViewItem(new[] { (i + 1).ToString(), ((int)_pads[i].X).ToString(), ((int)_pads[i].Y).ToString(), _pads[i].Manual ? "manual" : $"auto {_pads[i].Circularity:0.00}" }));
+            _list.EndUpdate();
+            _sel = -1; _canvas.Invalidate();
+        }
+
+        static double Dist(PointF a, Pad p) => Math.Sqrt(Math.Pow(a.X - p.X, 2) + Math.Pow(a.Y - p.Y, 2));
+
+        void PushUndo()
+        {
+            _undo.Push((_manual.Select(p => new Pad { X = p.X, Y = p.Y, R = p.R, Manual = true }).ToList(), new List<PointF>(_suppressed)));
+        }
+
+        void Undo()
+        {
+            if (_undo.Count == 0) { SetStatus("Nothing to undo."); return; }
+            var (m, s) = _undo.Pop(); _manual = m; _suppressed.Clear(); _suppressed.AddRange(s); Rebuild();
+            SetStatus($"Undone. {_pads.Count} pads.");
+        }
+
+        // ─────────────────────────── View math ───────────────────────────
+        PointF ToScreen(PointF p) => new PointF(p.X * _zoom + _off.X, p.Y * _zoom + _off.Y);
+        PointF ToImage(Point p) => new PointF((p.X - _off.X) / _zoom, (p.Y - _off.Y) / _zoom);
+
+        void FitView()
+        {
+            if (_bmp == null) return;
+            var r = _crop ?? new Rectangle(0, 0, _bmp.Width, _bmp.Height);
+            _zoom = Math.Min((_canvas.Width - 20f) / r.Width, (_canvas.Height - 20f) / r.Height);
+            _off = new PointF(_canvas.Width / 2f - (r.X + r.Width / 2f) * _zoom, _canvas.Height / 2f - (r.Y + r.Height / 2f) * _zoom);
+            _canvas.Invalidate();
+        }
+
+        void CenterOn(Pad p)
+        {
+            _zoom = Math.Max(_zoom, 3f);
+            _off = new PointF(_canvas.Width / 2f - (float)p.X * _zoom, _canvas.Height / 2f - (float)p.Y * _zoom);
+        }
+
+        void PaintCanvas(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            if (_bmp == null)
             {
-                // Missing/corrupt Assets folder shouldn't stop the app from
-                // running — just fall back to no custom icon.
-                Log("Could not load status icons from Assets\\: " + ex.Message);
+                TextRenderer.DrawText(g, "Drop a motherboard photo here\nor press Ctrl+O", new Font("Segoe UI", 16f), _canvas.ClientRectangle, Color.Gray,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                return;
+            }
+            g.InterpolationMode = _zoom > 2 ? System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor : System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+            g.DrawImage(_bmp, _off.X, _off.Y, _bmp.Width * _zoom, _bmp.Height * _zoom);
+
+            if (_crop.HasValue) DimOutside(g, _crop.Value);
+            PadRenderer.Draw(g, _pads, _ro, ToScreen, _zoom, _sel);
+            if (_cropDrag.HasValue)
+            {
+                var a = ToScreen(_cropDrag.Value.Location); var r = _cropDrag.Value;
+                using (var pen = new Pen(Color.DeepSkyBlue, 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash })
+                    g.DrawRectangle(pen, a.X, a.Y, r.Width * _zoom, r.Height * _zoom);
             }
         }
 
-        private void PlayEnabledSound()
+        void DimOutside(Graphics g, Rectangle c)
         {
-            try
+            var a = ToScreen(c.Location); var rc = new RectangleF(a.X, a.Y, c.Width * _zoom, c.Height * _zoom);
+            using (var reg = new Region(_canvas.ClientRectangle)) using (var br = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
+            { reg.Exclude(rc); g.FillRegion(br, reg); }
+            using (var pen = new Pen(Color.DeepSkyBlue, 1.5f)) g.DrawRectangle(pen, rc.X, rc.Y, rc.Width, rc.Height);
+        }
+
+        // ─────────────────────────── Mouse ───────────────────────────
+        void CanvasDown(object sender, MouseEventArgs e)
+        {
+            _canvas.Focus();
+            if (_bmp == null) return;
+            if (e.Button == MouseButtons.Middle || (e.Button == MouseButtons.Left && _mode == Mode.Pan))
+            { _panning = true; _dragStart = e.Location; _panOrigin = _off; return; }
+            var ip = ToImage(e.Location);
+            if (_mode == Mode.Crop && e.Button == MouseButtons.Left) { _dragStart = e.Location; _cropDrag = new Rectangle((int)ip.X, (int)ip.Y, 0, 0); return; }
+            if (_mode != Mode.Edit) return;
+
+            int hit = HitTest(ip);
+            if (e.Button == MouseButtons.Right && hit >= 0)
             {
-                _enabledSound ??= new SoundPlayer(EnabledSoundPath);
-                _enabledSound.Play(); // async — doesn't block the UI thread
+                PushUndo(); var p = _pads[hit];
+                if (p.Manual) _manual.RemoveAll(m => Math.Abs(m.X - p.X) < 0.5 && Math.Abs(m.Y - p.Y) < 0.5);
+                else _suppressed.Add(new PointF((float)p.X, (float)p.Y));
+                Rebuild(); SetStatus($"Removed pad. {_pads.Count} pads.");
             }
-            catch (Exception ex)
+            else if (e.Button == MouseButtons.Left)
             {
-                // A missing/locked wav file shouldn't stop the trigger from
-                // having already happened — just log it and move on.
-                Log($"Could not play enabled sound ({EnabledSoundPath}): {ex.Message}");
+                if (hit >= 0) { _sel = hit; _list.Items[hit].Selected = true; _list.EnsureVisible(hit); _canvas.Invalidate(); return; }
+                var rs = _pads.Select(p => p.R).OrderBy(r => r).ToList();
+                double defR = rs.Count > 0 ? rs[rs.Count / 2] : 6;
+                var np = PadDetector.Snap(_mat, ip.X, ip.Y, defR);
+                PushUndo();
+                _suppressed.RemoveAll(s => Math.Sqrt(Math.Pow(s.X - np.X, 2) + Math.Pow(s.Y - np.Y, 2)) <= np.R + 2);
+                _manual.Add(np); Rebuild(); SetStatus($"Added pad. {_pads.Count} pads.");
             }
         }
 
-        protected override void OnLoad(EventArgs e)
+        int HitTest(PointF ip)
         {
-            base.OnLoad(e);
-
-            bool enableOk = RegisterHotKey(Handle, HOTKEY_ID_ENABLE, MOD_CONTROL | MOD_ALT, VK_E);
-            bool disableOk = RegisterHotKey(Handle, HOTKEY_ID_DISABLE, MOD_CONTROL | MOD_ALT, VK_D);
-
-            if (!enableOk)
+            int best = -1; double bd = double.MaxValue;
+            for (int i = 0; i < _pads.Count; i++)
             {
-                Log("Warning: could not register global hotkey Ctrl+Alt+E (another app may already be using it). " +
-                    "The on-screen 'Enable Now' button still works.");
+                double d = Math.Sqrt(Math.Pow(_pads[i].X - ip.X, 2) + Math.Pow(_pads[i].Y - ip.Y, 2));
+                if (d <= _pads[i].R + 4 / _zoom + 2 && d < bd) { bd = d; best = i; }
             }
-            if (!disableOk)
-            {
-                Log("Warning: could not register global hotkey Ctrl+Alt+D (another app may already be using it). " +
-                    "The on-screen 'Disable & Arm' button still works.");
-            }
-            if (enableOk && disableOk)
-            {
-                Log("Global hotkeys registered — Ctrl+Alt+D disables/arms the selected device, Ctrl+Alt+E re-enables it.");
-            }
-
-            UpdateStatusUI();
-            RefreshDevices();
+            return best;
         }
 
-        protected override void OnFormClosing(FormClosingEventArgs e)
+        void CanvasMove(object sender, MouseEventArgs e)
         {
-            UnregisterHotKey(Handle, HOTKEY_ID_ENABLE);
-            UnregisterHotKey(Handle, HOTKEY_ID_DISABLE);
-
-            if (_disabledBySession.Count > 0)
+            if (_panning) { _off = new PointF(_panOrigin.X + e.X - _dragStart.X, _panOrigin.Y + e.Y - _dragStart.Y); _canvas.Invalidate(); return; }
+            if (_cropDrag.HasValue)
             {
-                var result = MessageBox.Show(
-                    $"{_disabledBySession.Count} USB device(s) are still disabled by this app.\n\n" +
-                    "Re-enable them before exiting?",
-                    "TestPoint Trigger",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Warning);
+                var a = ToImage(_dragStart); var b = ToImage(e.Location);
+                _cropDrag = Rectangle.FromLTRB((int)Math.Min(a.X, b.X), (int)Math.Min(a.Y, b.Y), (int)Math.Max(a.X, b.X), (int)Math.Max(a.Y, b.Y));
+                _canvas.Invalidate();
+            }
+        }
 
-                if (result == DialogResult.Yes)
+        void CanvasUp(object sender, MouseEventArgs e)
+        {
+            _panning = false;
+            if (_cropDrag.HasValue)
+            {
+                var r = Rectangle.Intersect(_cropDrag.Value, new Rectangle(0, 0, _bmp.Width, _bmp.Height)); _cropDrag = null;
+                if (r.Width > 20 && r.Height > 20) { _crop = r; SetMode(Mode.Edit); RunDetect(); }
+                _canvas.Invalidate();
+            }
+        }
+
+        void CanvasWheel(object sender, MouseEventArgs e)
+        {
+            if (_bmp == null) return;
+            var ip = ToImage(e.Location);
+            _zoom = Math.Max(0.05f, Math.Min(40f, _zoom * (e.Delta > 0 ? 1.2f : 1 / 1.2f)));
+            _off = new PointF(e.X - ip.X * _zoom, e.Y - ip.Y * _zoom);
+            _canvas.Invalidate();
+        }
+
+        void OnKey(object sender, KeyEventArgs e)
+        {
+            if (e.Control) return;
+            if (e.KeyCode == Keys.E) SetMode(Mode.Edit);
+            else if (e.KeyCode == Keys.P || e.KeyCode == Keys.Space) SetMode(Mode.Pan);
+            else if (e.KeyCode == Keys.C) SetMode(Mode.Crop);
+            else if (e.KeyCode == Keys.F) FitView();
+            else if (e.KeyCode == Keys.D) RunDetect();
+            else if (e.KeyCode == Keys.Delete && _sel >= 0)
+            {
+                var p = _pads[_sel]; PushUndo();
+                if (p.Manual) _manual.Remove(p); else _suppressed.Add(new PointF((float)p.X, (float)p.Y));
+                Rebuild();
+            }
+        }
+
+        // ─────────────────────────── Export ───────────────────────────
+        string BaseName => _path == null ? "board" : Path.GetFileNameWithoutExtension(_path);
+
+        void ExportPng()
+        {
+            if (_bmp == null) return;
+            using (var d = new SaveFileDialog { Filter = "PNG image|*.png", FileName = BaseName + "_pads.png" })
+            {
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                var crop = _crop ?? new Rectangle(0, 0, _bmp.Width, _bmp.Height);
+                float up = (float)_upscale.Value;
+                long px = (long)(crop.Width * up) * (long)(crop.Height * up);
+                if (px > 180_000_000) { MessageBox.Show(this, "Export too large — lower the upscale or crop to the board.", "Export"); return; }
+                using (var bmp = PadRenderer.Export(_bmp, crop, _pads, _ro, up, $"{Credit} · {_pads.Count} pads"))
+                    bmp.Save(d.FileName, ImageFormat.Png);
+                SetStatus($"Saved {d.FileName}");
+            }
+        }
+
+        void ExportCsv()
+        {
+            if (_pads.Count == 0) return;
+            using (var d = new SaveFileDialog { Filter = "CSV|*.csv", FileName = BaseName + "_pads.csv" })
+            {
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                var sb = new StringBuilder("id,x,y,radius,source,circularity,probed,notes\r\n");
+                for (int i = 0; i < _pads.Count; i++)
                 {
-                    ReenableAll();
+                    var p = _pads[i];
+                    sb.Append($"{i + 1},{(int)Math.Round(p.X)},{(int)Math.Round(p.Y)},{p.R:0.0},{(p.Manual ? "manual" : "auto")},{(p.Manual ? "" : p.Circularity.ToString("0.00"))},,\r\n");
                 }
-            }
-
-            trayIcon.Visible = false;
-            _enabledSound?.Dispose();
-            base.OnFormClosing(e);
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == WM_HOTKEY)
-            {
-                int id = m.WParam.ToInt32();
-                if (id == HOTKEY_ID_ENABLE)
-                {
-                    TriggerNow();
-                }
-                else if (id == HOTKEY_ID_DISABLE)
-                {
-                    ArmFromHotkey();
-                }
-            }
-            base.WndProc(ref m);
-        }
-
-        // ---- Status icon / toggle button / tray sync ----
-
-        private bool IsArmed => _armedDeviceId != null;
-
-        private void UpdateStatusUI()
-        {
-            if (IsArmed)
-            {
-                toggleButton.Text = "Disabled — click to Enable Now";
-                toggleButton.Image = _imgDisabled;
-                if (_iconDisabled != null) Icon = _iconDisabled;
-                trayIcon.Icon = _iconDisabled ?? Icon;
-                trayIcon.Text = Truncate($"TestPoint Trigger — disabled ({_armedDeviceName})", 63);
-                trayToggleItem.Text = "Enable Now";
-            }
-            else
-            {
-                toggleButton.Text = "Enabled — click to Disable && Arm";
-                toggleButton.Image = _imgEnabled;
-                if (_iconEnabled != null) Icon = _iconEnabled;
-                trayIcon.Icon = _iconEnabled ?? Icon;
-                trayIcon.Text = "TestPoint Trigger — enabled";
-                trayToggleItem.Text = "Disable && Arm";
+                sb.Append($"# {Credit}\r\n");
+                File.WriteAllText(d.FileName, sb.ToString(), new UTF8Encoding(true));
+                SetStatus($"Saved {d.FileName}");
             }
         }
 
-        private static string Truncate(string s, int max) =>
-            s.Length <= max ? s : s.Substring(0, max - 1) + "…";
+        void ShowHelp() => MessageBox.Show(this,
+            "1. Open, drop or paste a top-down motherboard photo.\n" +
+            "2. Crop (C): drag around the board to exclude the battery label and bezel.\n" +
+            "3. Tune sliders if needed — missing pads: lower Min size / Roundness; false hits: raise them.\n" +
+            "4. Edit (E): left-click a missed pad to add it (snaps to its centre); right-click or Delete removes.\n" +
+            "   Removed auto-pads stay removed when you re-detect. Ctrl+Z undoes.\n" +
+            "5. Choose Labels only or Circles + labels, then Export PNG (upscaled) and CSV checklist.\n\n" +
+            "Keys: E edit · P/Space pan · C crop · F fit · D detect · wheel zoom · middle-drag pan.\n\n" +
+            "Candidates only — confirm the real test point by probing.", "How to use");
+    }
 
-        // ---- Tray icon actions ----
-
-        private void TrayShowItem_Click(object sender, EventArgs e)
-        {
-            Show();
-            WindowState = FormWindowState.Normal;
-            Activate();
-        }
-
-        private void TrayExitItem_Click(object sender, EventArgs e) => Close();
-
-        // ---- Help ----
-
-        private void HelpButton_Click(object sender, EventArgs e)
-        {
-            using var help = new HelpForm(RepoUrl);
-            help.ShowDialog(this);
-        }
-
-        // ---- Device enumeration ----
-
-        private void RefreshDevices()
-        {
-            devicesCombo.Items.Clear();
-
-            try
-            {
-                // PNPClass == "USB" covers both USB-enumerated hubs/root hubs
-                // AND PCI-enumerated host controllers - i.e. exactly the set
-                // shown under Device Manager's "Universal Serial Bus
-                // controllers" node.
-                using var searcher = new ManagementObjectSearcher(
-                    "SELECT Name, DeviceID, PNPClass, Status FROM Win32_PnPEntity WHERE PNPClass = 'USB'");
-
-                foreach (ManagementObject mo in searcher.Get())
-                {
-                    string name = mo["Name"]?.ToString() ?? "(unnamed device)";
-                    string id = mo["DeviceID"]?.ToString();
-                    string status = mo["Status"]?.ToString() ?? "";
-
-                    if (string.IsNullOrEmpty(id))
-                    {
-                        continue;
-                    }
-
-                    devicesCombo.Items.Add(new UsbDeviceInfo { Name = name, DeviceId = id, Status = status });
-                }
-
-                Log($"Found {devicesCombo.Items.Count} USB hub/controller device(s).");
-            }
-            catch (Exception ex)
-            {
-                Log("Error enumerating devices (run as Administrator?): " + ex.Message);
-            }
-
-            if (devicesCombo.Items.Count > 0)
-            {
-                devicesCombo.SelectedIndex = 0;
-            }
-        }
-
-        private void RefreshButton_Click(object sender, EventArgs e) => RefreshDevices();
-
-        // ---- Toggle (Arm / Trigger in one button) ----
-
-        private void ToggleButton_Click(object sender, EventArgs e)
-        {
-            if (IsArmed)
-            {
-                TriggerNow();
-                return;
-            }
-
-            if (devicesCombo.SelectedItem is not UsbDeviceInfo dev)
-            {
-                MessageBox.Show("Select a USB hub/controller first.", "TestPoint Trigger");
-                return;
-            }
-
-            var confirm = MessageBox.Show(
-                "This will disable:\n\n" +
-                $"{dev.Name}\n{dev.DeviceId}\n\n" +
-                "ALL devices on this hub/controller (keyboard, mouse, webcam, etc. if they share it) " +
-                "will stop responding until it is re-enabled.\n\n" +
-                "Strongly recommended: point this at a dedicated/spare USB hub with only the target " +
-                "phone cable plugged into it, not the port sharing your keyboard/mouse.\n\nContinue?",
-                "Confirm disable",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
-
-            if (confirm != DialogResult.Yes)
-            {
-                return;
-            }
-
-            ArmDevice(dev);
-        }
-
-        // Ctrl+Alt+D — same as the toggle button's "arm" path, but skips the
-        // confirmation dialog: a hotkey press is already a deliberate
-        // action, and a modal dialog would just block while your hands are full.
-        private void ArmFromHotkey()
-        {
-            if (IsArmed)
-            {
-                Log("Already armed — trigger (Ctrl+Alt+E) or re-enable it first.");
-                return;
-            }
-
-            if (devicesCombo.SelectedItem is not UsbDeviceInfo dev)
-            {
-                Log("Ctrl+Alt+D pressed, but no USB hub/controller is selected.");
-                return;
-            }
-
-            ArmDevice(dev);
-        }
-
-        private void ArmDevice(UsbDeviceInfo dev)
-        {
-            var (ok, output) = PnpUtil.Disable(dev.DeviceId);
-            Log(output);
-
-            if (!ok)
-            {
-                MessageBox.Show("Failed to disable the device. See the log for details.", "TestPoint Trigger",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            _disabledBySession.Add(dev.DeviceId);
-            _armedDeviceId = dev.DeviceId;
-            _armedDeviceName = dev.Name;
-            _secondsRemaining = (int)secondsUpDown.Value;
-            UpdateCountdownLabel();
-            _countdownTimer.Start();
-
-            devicesCombo.Enabled = false;
-            UpdateStatusUI();
-
-            Log($"ARMED: '{dev.Name}' disabled. Position tweezers on the test point, hold the battery " +
-                "clip connected, and get the USB cable seated. Press Ctrl+Alt+E (or click the toggle) " +
-                "the instant contact is solid — or let the countdown finish on its own.");
-        }
-
-        // ---- Countdown / trigger ----
-
-        private void CountdownTimer_Tick(object sender, EventArgs e)
-        {
-            _secondsRemaining--;
-            UpdateCountdownLabel();
-
-            if (_secondsRemaining <= 0)
-            {
-                TriggerNow();
-            }
-        }
-
-        private void UpdateCountdownLabel()
-        {
-            countdownLabel.Text = _secondsRemaining > 0 ? $"{_secondsRemaining}s" : "GO";
-        }
-
-        private void TriggerNow()
-        {
-            if (_armedDeviceId == null)
-            {
-                return;
-            }
-
-            _countdownTimer.Stop();
-
-            var (ok, output) = PnpUtil.Enable(_armedDeviceId);
-            Log(output);
-
-            if (ok)
-            {
-                _disabledBySession.Remove(_armedDeviceId);
-                Log($"TRIGGERED: '{_armedDeviceName}' re-enabled — Windows should now enumerate it fresh, " +
-                    "same as a brand-new plug-in. Check Device Manager / QFIL / your flash tool now.");
-                PlayEnabledSound();
-            }
-            else
-            {
-                Log("Failed to re-enable the device! Use 'Re-enable All' below or Device Manager immediately.");
-            }
-
-            countdownLabel.Text = "--";
-            devicesCombo.Enabled = true;
-            _armedDeviceId = null;
-            UpdateStatusUI();
-        }
-
-        // ---- Panic / cleanup ----
-
-        private void PanicButton_Click(object sender, EventArgs e) => ReenableAll();
-
-        private void ReenableAll()
-        {
-            foreach (var id in _disabledBySession.ToList())
-            {
-                var (ok, output) = PnpUtil.Enable(id);
-                Log(output);
-                if (ok)
-                {
-                    _disabledBySession.Remove(id);
-                }
-            }
-
-            _countdownTimer.Stop();
-            devicesCombo.Enabled = true;
-            countdownLabel.Text = "--";
-            _armedDeviceId = null;
-            UpdateStatusUI();
-
-            Log("Re-enable All complete.");
-        }
-
-        private void Log(string message)
-        {
-            if (string.IsNullOrWhiteSpace(message))
-            {
-                return;
-            }
-
-            logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message.Trim()}{Environment.NewLine}");
-        }
+    class CanvasPanel : Panel
+    {
+        public CanvasPanel() { DoubleBuffered = true; ResizeRedraw = true; SetStyle(ControlStyles.Selectable, true); TabStop = true; }
     }
 }

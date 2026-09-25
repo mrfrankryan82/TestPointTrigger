@@ -1,151 +1,24 @@
-# TestPoint Trigger
+# TestPoint Trigger — PCB Pad Finder (v2.0.0)
 
-![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![.NET Framework 4.8](https://img.shields.io/badge/.NET%20Framework-4.8-512BD4.svg)
-![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6.svg)
+Finds candidate **gold and white/tinned solder test pads** on a motherboard photo, numbers them in reading order and exports a labelled image plus a CSV elimination checklist.
 
-A small WinForms (.NET Framework 4.8) tool for the classic "test point"
-problem when forcing a phone into Qualcomm EDL (BROM) mode: you need three
-things happening at once — tweezers bridging the test point to ground,
-the battery clip connected, and the USB cable seated — but you only have
-two hands.
+> v2.0.0 is a full rewrite. The v1.x USB hub disable/re-enable trigger is kept in git history (tag `v1-usb-trigger`).
 
-This app lets you plug the USB cable in ahead of time, but keep Windows
-from seeing it as connected, then flip it "live" with a single keypress
-(or a countdown) once your tweezers and battery clip are already in
-position — so the only thing that has to happen at the last instant is a
-key press instead of a physical USB insertion.
+## Features
+- Detection ported from the HaKDMoDz test-point-pad-detector skill (OpenCV): gold HSV band + bright/unsaturated tinned mask, roundness filter, and rejection of screw holes/"O" glyphs, silkscreen text on the bezel, and pads embedded in shield metal.
+- Crop to board (exclude battery label/bezel) — detection runs only inside the crop.
+- Live tuning sliders (debounced re-detect).
+- Manual edits: left-click adds a pad that **snaps to its true centre**; right-click / Delete removes. Removed auto-pads stay removed after re-detect; duplicates merge automatically; Ctrl+Z undo.
+- Label placement tries 8 positions around each pad and never covers a pad or another label.
+- Styles: **Labels only** (pads untouched) or **Circles + labels**.
+- Export upscaled PNG (1–6×) with credit footer, and CSV (`id,x,y,radius,source,circularity,probed,notes`).
+- Open / drag-drop / paste (Ctrl+V); EXIF orientation of phone photos handled.
 
-Two global hotkeys drive it (they work even without the window focused,
-since your hands are full): **Ctrl+Alt+D** disables/arms the selected
-hub, **Ctrl+Alt+E** re-enables it (the "go" trigger). A single toggle
-button mirrors the same two actions, and its icon (and the app/tray icon)
-switch between green (enabled) and red (disabled) so the current state is
-visible at a glance — including from the system tray if the window is
-minimized. A **Help** button in the app opens a quick reference plus a
-link back to this README.
-
-## How it works
-
-It doesn't touch the phone or the cable at all. It disables the specific
-USB hub / host controller device node the phone's cable is plugged into
-(via the built-in `pnputil /disable-device`), then re-enables it
-(`pnputil /enable-device`) on your signal. Re-enabling makes Windows
-re-enumerate everything on that hub from scratch — electrically identical
-to a fresh plug-in — even though the cable never moved.
-
-## Important safety notes
-
-- **Use a dedicated/spare USB hub for the phone cable.** Disabling a hub
-  or host controller disables *everything* downstream of it — if your
-  keyboard or mouse shares that same root hub, they'll go dead too until
-  you re-enable it. A $5 USB hub plugged into a rarely-used port, with
-  only the phone cable in it, is the safe way to do this.
-- The app must run **as Administrator** — the manifest is already set to
-  request elevation, so Windows will prompt once at launch.
-- **"Re-enable All"** and the close-time prompt exist as a safety net —
-  if anything goes wrong mid-session, use that button (or Device Manager
-  directly) rather than leaving a hub disabled.
-- Disabling a device node stops Windows from binding a driver to it and
-  from enumerating it, but whether it also drops VBUS/power on that port
-  depends on the specific host controller/hub chipset — behavior isn't
-  100% uniform across PCs. If your target SoC needs the data lines truly
-  floating (not just "undetected by Windows") until the trigger moment,
-  a physical inline switch between the port and the phone — the same
-  idea as a commercial "deep-flash"/EDL test-point cable, just a
-  pushbutton or relay wired into D+/D-/VBUS — is the more reliable
-  option. That's a small enough build (and a good fit for something like
-  an ESP8266 or just a momentary switch + relay) if the software-only
-  approach doesn't behave consistently on your hardware — happy to help
-  design that circuit if you want a belt-and-suspenders version.
-
-## Administrator elevation
-
-The app is set up two ways to make sure it always runs elevated (pnputil
-needs it):
-
-1. `app.manifest` declares `requireAdministrator`, so Windows normally
-   shows the UAC prompt (or blocks the launch) before the app's code ever
-   runs at all.
-2. As a failsafe, `Program.cs` also checks at startup whether the process
-   is actually running as Administrator. If it isn't (e.g. the manifest
-   didn't apply for some reason), it relaunches itself with the `runas`
-   verb — which pops the UAC prompt — and the non-elevated copy exits. If
-   you click "No" on that prompt, it shows a short message explaining
-   admin is required instead of continuing to run without it.
+## Keys
+`E` edit · `P`/`Space` pan · `C` crop · `F` fit · `D` detect · wheel zoom · middle-drag pan · `Ctrl+Z` undo · `Ctrl+S` export PNG
 
 ## Build
+Visual Studio 2022 (or `dotnet build -c Release`), .NET Framework 4.8, x64. NuGet: OpenCvSharp4 + OpenCvSharp4.runtime.win.
 
-Requires the ".NET desktop development" workload in Visual Studio 2022
-(or the .NET Framework 4.8 targeting pack + `dotnet` CLI).
-
-```
-cd TestPointTrigger
-dotnet build -c Release
-```
-
-or just open `TestPointTrigger.sln` in Visual Studio and hit Build/Run (F5).
-The output `TestPointTrigger.exe` lands in
-`TestPointTrigger\bin\x64\Release\net48\`.
-
-Run the .exe directly (double-click, or right-click → Run as
-administrator if UAC doesn't prompt automatically).
-
-## Usage
-
-1. Plug your dedicated USB hub into the PC; plug the phone's USB cable
-   into that hub (phone can be powered off / battery disconnected at
-   this point).
-2. Launch the app (it will prompt for admin elevation).
-3. Click **Refresh**, then select that hub from the dropdown. (The list
-   shows everything under Device Manager's "Universal Serial Bus
-   controllers" node — hubs and host controllers.)
-4. Set the countdown seconds — this is just a fallback in case you don't
-   hit the hotkey; pick something generous (10-20s) while you're still
-   getting the hang of the test-point contact.
-5. Click the toggle button (shows a green "Enabled" icon), or press
-   **Ctrl+Alt+D** (skips the confirmation dialog, since pressing a hotkey
-   is already deliberate). The hub goes dark to Windows, the button/tray
-   icon turn red, and the countdown starts.
-6. Get your tweezers on the test point and the battery clip connected.
-   The USB cable is already seated, so nothing else needs plugging.
-7. The instant contact feels solid, press **Ctrl+Alt+E** (works
-   globally, no need to click into the window first) or click the toggle
-   button again (now showing red "Disabled"). This re-enables the hub,
-   and Windows re-enumerates the phone as if it were just plugged in.
-8. Check Device Manager / QFIL / your flash tool for the EDL (Qualcomm
-   HS-USB QDLoader 9008) or BROM port.
-
-If it doesn't show up, re-arm and try again — test point contact timing
-usually takes a few attempts to get consistent regardless of tooling.
-
-## Sound on enable
-
-When the hub is successfully re-enabled (the trigger fires — countdown,
-hotkey, or button), the app plays
-`C:\Users\User\Downloads\hardware_inserted\hardware_inserted.wav` as an
-audible confirmation, so you don't have to be looking at the screen at
-the exact moment. If that file isn't there, it's just skipped (logged,
-not a crash) — the trigger itself isn't affected either way. Change the
-path in `MainForm.cs` (`EnabledSoundPath`) if you keep the wav somewhere else.
-
-## Help button and status icons
-
-The **Help** button (top right) opens a short in-app reference with a
-link back to this README on GitHub. The same green/red icon is used in
-three places so the state is always obvious: the toggle button, the
-window/taskbar icon, and a system tray icon (with a right-click menu for
-Show / Disable & Arm / Enable Now / Re-enable All / Exit). Icons live in
-`TestPointTrigger\Assets\` and are copied next to the built exe
-automatically.
-
-## Developer credit / versioning
-
-The main window and the Help dialog both show a footer:
-`HaKDMoDz™ • v<version> • <date>`. The version comes from the csproj's
-`<Version>` (bump it there for a release) and the date is a constant in
-`AppInfo.cs` — update both together when a meaningful change ships.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+---
+Developer: **HaKDMoDz™** · v2.0.0 · 2026-09-23
