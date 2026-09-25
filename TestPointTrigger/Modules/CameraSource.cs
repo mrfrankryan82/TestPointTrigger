@@ -34,9 +34,24 @@ namespace TestPointTrigger.Modules
         {
             try
             {
+                // RTSP over UDP drops packets on busy wifi, which shows up as
+                // torn frames and snow. Forcing TCP transport fixes it at the
+                // cost of a little latency. FFmpeg reads this env var.
+                if (Kind == SourceKind.NetworkStream &&
+                    Url.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
+                {
+                    Environment.SetEnvironmentVariable(
+                        "OPENCV_FFMPEG_CAPTURE_OPTIONS",
+                        "rtsp_transport;tcp|max_delay;500000|buffer_size;2048000");
+                }
+
+                // Network streams go through FFmpeg explicitly - it ships
+                // with the OpenCvSharp runtime (opencv_videoio_ffmpeg*.dll)
+                // and handles MJPEG, H.264 and RTSP far more reliably than
+                // letting the backend be auto-selected.
                 var cap = Kind == SourceKind.LocalDevice
                     ? new VideoCapture(DeviceIndex)
-                    : new VideoCapture(Url);
+                    : new VideoCapture(Url, VideoCaptureAPIs.FFMPEG);
 
                 if (!cap.IsOpened()) { cap.Dispose(); return null; }
 

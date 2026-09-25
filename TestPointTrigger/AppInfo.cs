@@ -9,7 +9,7 @@ namespace TestPointTrigger
     internal static class AppInfo
     {
         public const string DeveloperName = "HaKDMoDz™";
-        public const string ReleaseDate = "2026-09-10";
+        public const string ReleaseDate = "2026-09-26";
 
         public static string VersionText
         {

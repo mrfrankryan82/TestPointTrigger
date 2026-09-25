@@ -40,6 +40,9 @@ namespace TestPointTrigger
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
 
+            Observation?.Invoke(this, "[vision loop started, model " + Model + "]");
+            var waitingLogged = false;
+
             Task.Run(async () =>
             {
                 while (!token.IsCancellationRequested)
@@ -48,11 +51,20 @@ namespace TestPointTrigger
                     {
                         using (var frame = frameSource())
                         {
-                            if (frame != null)
+                            if (frame == null)
+                            {
+                                if (!waitingLogged)
+                                {
+                                    waitingLogged = true;
+                                    Observation?.Invoke(this, "[waiting for first frame...]");
+                                }
+                            }
+                            else
                             {
                                 var text = await DescribeAsync(frame, token).ConfigureAwait(false);
-                                if (!string.IsNullOrWhiteSpace(text))
-                                    Observation?.Invoke(this, text.Trim());
+                                Observation?.Invoke(this, string.IsNullOrWhiteSpace(text)
+                                    ? "[empty reply from model]"
+                                    : text.Trim());
                             }
                         }
                     }
