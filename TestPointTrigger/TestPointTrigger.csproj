@@ -10,20 +10,27 @@
     <Company>HaKDMoDz™</Company>
     <Product>TestPoint Trigger</Product>
     <Copyright>© 2026 HaKDMoDz™</Copyright>
-    <Version>3.1.0</Version>
-    <FileVersion>3.1.0.0</FileVersion>
-    <AssemblyVersion>3.1.0.0</AssemblyVersion>
+    <Version>3.4.1</Version>
+    <FileVersion>3.4.1.0</FileVersion>
+    <AssemblyVersion>3.4.1.0</AssemblyVersion>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Status icons for the USB Hub Trigger module, loaded at runtime. -->
+    <None Update="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Management" />
+    <Reference Include="System.Speech" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="OpenCvSharp4" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.Extensions" Version="4.10.0.20241108" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>

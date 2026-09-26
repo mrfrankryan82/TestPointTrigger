@@ -1,5 +1,5 @@
-// TestPoint Trigger - Live Coach module
-// Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
+﻿// TestPoint Trigger - Live Coach module
+// Developer: HaKDMoDz™ · v1.2.0 · 2026-09-26
 using System;
 using System.Drawing;
 using System.Windows.Forms;
@@ -17,7 +17,7 @@ namespace TestPointTrigger.Modules
         public string Id => "livecoach";
         public string Title => "Live Coach";
         public string Description => "Camera + USB watcher coaching for EDL/BROM entry";
-        public string Version => "1.1.0";
+        public string Version => "1.2.0";
         public int SortOrder => 10;
 
         private IModuleHost _host;
@@ -94,16 +94,25 @@ namespace TestPointTrigger.Modules
             var bStop = new Button { Text = "Stop", AutoSize = true };
             bStart.Click += (s, e) => StartWatching();
             bStop.Click += (s, e) => { Log("Stop clicked."); StopWatching(); Log("Stopped."); };
-            bar.Controls.AddRange(new Control[] { _kind, _app, lblIp, _host_ip, bStart, bStop });
+            var bHelp = new Button { Text = "Quick start", AutoSize = true };
+            bHelp.Click += (s, e) => ShowQuickStart();
+            bar.Controls.AddRange(new Control[] { _kind, _app, lblIp, _host_ip, bStart, bStop, bHelp });
 
-            _log = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
+            _log = new ListBox
+            {
+                Dock = DockStyle.Fill, IntegralHeight = false,
+                HorizontalScrollbar = true, Font = new Font("Consolas", 9f)
+            };
             _log.HandleCreated += (s, e) =>
             {
                 lock (_pending)
                 {
-                    for (int i = _pending.Count - 1; i >= 0; i--)
-                        _log.Items.Insert(0, _pending[i]);
+                    // Pending lines are already oldest-first; append in order.
+                    foreach (var line in _pending) _log.Items.Add(line);
                     _pending.Clear();
+                    while (_log.Items.Count > 200) _log.Items.RemoveAt(0);
+                    // Startup buffer begins with the quick-start card: open at its top.
+                    _log.TopIndex = 0;
                 }
             };
 
@@ -112,7 +121,77 @@ namespace TestPointTrigger.Modules
             root.Controls.Add(_preview, 0, 0);
             root.Controls.Add(right, 1, 0);
 
+            ShowQuickStart();
             return root;
+        }
+
+        /// <summary>
+        /// Reminder card written once per session, the first time Live Coach
+        /// opens. Buffered until the log exists, so it is there before any
+        /// camera is started.
+        /// </summary>
+        private static readonly string[] QuickStartLines =
+            {
+                "──────────── LIVE COACH · QUICK START ────────────",
+                "NEEDS: Ollama running (tray icon) with the minicpm-v model,",
+                "       and a camera pointed straight down at the bench.",
+                "",
+                "USB WEBCAM",
+                "  1. Plug it in, choose \"Local camera\", press Start watching.",
+                "",
+                "PHONE AS CAMERA  (phone + PC on the SAME Wi-Fi)",
+                "  1. Install IP Webcam (Android, port 8080) or DroidCam (port 4747).",
+                "  2. Open the app, start its server, note the IP it shows",
+                "     e.g. 192.168.1.23",
+                "  3. Choose \"Phone camera\", pick the app, type just the IP",
+                "     (no http://, no port — added for you).",
+                "  4. RTSP apps: enter rtsp://ip:port/path.",
+                "     \"Full URL\": paste the complete stream address.",
+                "  5. Press Start watching. \"Connecting…\" then a picture = working.",
+                "",
+                "READING THE LOG",
+                "  eyes: = vision model's guess every ~1.5 s. Advisory only.",
+                "  usb : = real USB detection of EDL/BROM. This is the one to trust.",
+                "",
+                "WITH USB HUB TRIGGER",
+                "  Arm the hub on that page, come back here — its hotkeys, voice",
+                "  and countdown keep working while you watch for the device.",
+                "",
+                "IF IT FAILS",
+                "  \"vision unavailable\" → start Ollama; `ollama list` should show minicpm-v.",
+                "  Phone won't connect  → same Wi-Fi? app server on? open the URL in a browser.",
+                "  Leaving this page stops the camera; press Start again when you return.",
+                "──────────────────────────────────────────────────"
+            };
+
+        private void ShowQuickStart()
+        {
+            var lines = QuickStartLines;
+            // Show the card from its first line, not the auto-scrolled bottom.
+            int start = _log != null && _log.IsHandleCreated ? _log.Items.Count : 0;
+            foreach (var l in lines) Log(l, stamp: false);
+            if (_log != null && _log.IsHandleCreated && !_log.InvokeRequired)
+                _log.TopIndex = Math.Min(start, Math.Max(0, _log.Items.Count - 1));
+        }
+
+        /// <summary>
+        /// Removes every copy of the quick-start card once a stream is up,
+        /// leaving real log lines (earlier usb/eyes events) untouched. Card
+        /// lines are unstamped, so they never collide with timestamped ones.
+        /// </summary>
+        private void ClearQuickStart()
+        {
+            var card = new System.Collections.Generic.HashSet<string>(QuickStartLines);
+            lock (_pending) _pending.RemoveAll(card.Contains);
+            if (_log == null || _log.IsDisposed || !_log.IsHandleCreated) return;
+
+            _log.BeginUpdate();
+            try
+            {
+                for (int i = _log.Items.Count - 1; i >= 0; i--)
+                    if (_log.Items[i] is string s && card.Contains(s)) _log.Items.RemoveAt(i);
+            }
+            finally { _log.EndUpdate(); }
         }
 
         public void Activate()
@@ -147,6 +226,11 @@ namespace TestPointTrigger.Modules
                     : "Could not reach the phone stream. Check the app is running and the IP is right.");
                 return;
             }
+
+            // Connected: the setup card has done its job. Clear it so the
+            // log is just this session's coaching and USB events.
+            ClearQuickStart();
+            Log("Connected: " + src + ". (Quick start button brings the setup notes back.)");
 
             // Capture runs on its own thread. Read() can block longer than the
             // frame interval, and on the UI thread that starves painting and
@@ -276,24 +360,33 @@ namespace TestPointTrigger.Modules
             _host?.Notify(line, sev);
         }
 
-        private void Log(string text)
+        private void Log(string text, bool stamp = true)
         {
+            // Mirror real events to the single app-wide log file (skip the
+            // decorative, unstamped quick-start card).
+            if (stamp)
+                AppLog.Append("LiveCoach",
+                    text.StartsWith("eyes:") ? "EYES" : text.StartsWith("usb :") ? "USB" : "INFO", text);
+
             if (_log == null || _log.IsDisposed) return;
+            var line = stamp ? DateTime.Now.ToString("HH:mm:ss") + "  " + text : text;
 
             // The handle does not exist until the view is actually shown.
             // Queue anything logged before that and flush it on HandleCreated,
             // otherwise startup messages disappear without trace.
             if (!_log.IsHandleCreated)
             {
-                lock (_pending) _pending.Add(DateTime.Now.ToString("HH:mm:ss") + "  " + text);
+                lock (_pending) _pending.Add(line);
                 return;
             }
 
             Action add = () =>
             {
                 if (_log.IsDisposed) return;
-                _log.Items.Insert(0, DateTime.Now.ToString("HH:mm:ss") + "  " + text);
-                while (_log.Items.Count > 200) _log.Items.RemoveAt(_log.Items.Count - 1);
+                _log.Items.Add(line);
+                while (_log.Items.Count > 200) _log.Items.RemoveAt(0);
+                // Keep the newest line in view.
+                _log.TopIndex = Math.Max(0, _log.Items.Count - 1);
             };
             try
             {

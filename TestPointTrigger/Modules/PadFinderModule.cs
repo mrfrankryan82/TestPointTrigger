@@ -16,7 +16,7 @@ namespace TestPointTrigger.Modules
         public string Id => "padfinder";
         public string Title => "PCB Pad Finder";
         public string Description => "Find and label test pads on motherboard photos";
-        public string Version => "3.0.0";
+        public string Version => "3.0.1";
         public int SortOrder => 20;
 
         private MainForm _form;

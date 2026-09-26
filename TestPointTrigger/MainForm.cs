@@ -18,8 +18,9 @@ namespace TestPointTrigger
 {
     public partial class MainForm : Form
     {
-        public const string AppVersion = "3.0.0";
-        public const string BuildDate = "2026-09-26";
+        // Read from the assembly so the title/footer always match the csproj <Version>.
+        public static readonly string AppVersion = AppInfo.VersionText;
+        public const string BuildDate = AppInfo.ReleaseDate;
         public static readonly string Credit = $"Developer: HaKDMoDz™ · v{AppVersion} · {BuildDate}";
 
         enum Mode { Pan, Edit, Crop }
@@ -106,9 +107,9 @@ namespace TestPointTrigger
             var side = new Panel { Dock = DockStyle.Right, Width = 300, Padding = new Padding(8) };
             var tbl = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1 };
             AddHeader(tbl, "Detection");
-            AddSlider(tbl, "Min pad size", 5, 200, 25, v => _ds.MinAreaFrac = v * 1e-6, v => $"{v * 1e-6:0.0e0}");
-            AddSlider(tbl, "Max pad size", 100, 5000, 1000, v => _ds.MaxAreaFrac = v * 1e-6, v => $"{v * 1e-6:0.0e0}");
-            AddSlider(tbl, "Roundness (circularity)", 40, 95, 78, v => _ds.CircMin = v / 100.0, v => (v / 100.0).ToString("0.00"));
+            AddSlider(tbl, "Min pad size", 3, 200, 8, v => _ds.MinAreaFrac = v * 1e-6, v => $"{v * 1e-6:0.0e0}");
+            AddSlider(tbl, "Max pad size", 100, 8000, 2800, v => _ds.MaxAreaFrac = v * 1e-6, v => $"{v * 1e-6:0.0e0}");
+            AddSlider(tbl, "Roundness (circularity)", 30, 95, 55, v => _ds.CircMin = v / 100.0, v => (v / 100.0).ToString("0.00"));
             AddSlider(tbl, "Shield-metal rejection", 20, 100, 55, v => _ds.IsoMax = v / 100.0, v => (v / 100.0).ToString("0.00"));
             AddSlider(tbl, "Bezel-text rejection", 0, 120, 50, v => _ds.DarkSurroundV = v, v => v.ToString());
             AddSlider(tbl, "Screw-hole rejection", 30, 95, 68, v => _ds.DonutRatio = v / 100.0, v => (v / 100.0).ToString("0.00"));
@@ -229,7 +230,9 @@ namespace TestPointTrigger
                 var res = await Task.Run(() => PadDetector.Detect(mat, ds, roi));
                 if (gen != _detectGen) return;
                 _detected = res; Rebuild();
-                SetStatus($"{_pads.Count} candidate pads ({_detected.Count} detected, {_manual.Count} manual, {_suppressed.Count} removed).");
+                SetStatus(_pads.Count == 0
+                    ? "No pads found even after auto-relaxing. Crop tighter to the board, or click pads manually in Edit mode."
+                    : $"{_pads.Count} candidate pads ({_detected.Count} detected, {_manual.Count} manual, {_suppressed.Count} removed).");
             }
             catch (Exception ex) { SetStatus("Detection failed: " + ex.Message); }
             finally { UseWaitCursor = false; }

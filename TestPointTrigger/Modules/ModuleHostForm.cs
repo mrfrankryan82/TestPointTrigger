@@ -160,6 +160,7 @@ namespace TestPointTrigger.Modules
 
         public void Notify(string message, ModuleSeverity severity)
         {
+            AppLog.Append("Host", severity.ToString().ToUpperInvariant(), message);
             SetStatus(message);
             if (severity == ModuleSeverity.Error || severity == ModuleSeverity.Warning)
                 System.Media.SystemSounds.Exclamation.Play();
