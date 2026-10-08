@@ -1,4 +1,4 @@
-// TestPoint Trigger - Modular host shell (NAXUS-themed)
+﻿// TestPoint Trigger - Modular host shell (NAXUS-themed)
 // Developer: HaKDMoDz™ · v3.1.0 · 2026-09-26
 using System;
 using System.Collections.Generic;
@@ -14,126 +14,64 @@ namespace TestPointTrigger.Modules
     /// header card, the module content area and a footer. Knows nothing about
     /// what any module does.
     /// </summary>
-    public class ModuleHostForm : Form, IModuleHost
+    public partial class ModuleHostForm : Form, IModuleHost
     {
         private readonly List<IModule> _modules = new List<IModule>();
         private readonly Dictionary<string, Control> _views =
             new Dictionary<string, Control>(StringComparer.OrdinalIgnoreCase);
 
         private IModule _active;
-        private readonly ListBox _nav;
-        private readonly Panel _viewHost;
-        private readonly HeroCard _hero;
-        private readonly Label _status;
         private int _hoverIndex = -1;
 
         public ModuleHostForm()
         {
-            Text = "TestPoint Trigger — Bench Suite  v" + MainForm.AppVersion;
-            Size = new Size(1420, 920);
-            StartPosition = FormStartPosition.CenterScreen;
-            Font = new Font("Segoe UI", 9.5f);
-            BackColor = Theme.Bg;
-            ForeColor = Theme.Text;
+            // Sidebar, logo, navigation, header card and footer live in
+            // ModuleHostForm.Designer.cs (open it in Design View to restyle).
+            InitializeComponent();
             DoubleBuffered = true;
-
-            // ── sidebar ──
-            var sidebar = new Panel { Dock = DockStyle.Left, Width = 288, BackColor = Theme.Sidebar, Padding = new Padding(16) };
-
-            var logo = BuildLogoCard();
-
-            _nav = new ListBox
-            {
-                Dock = DockStyle.Fill,
-                BorderStyle = BorderStyle.None,
-                BackColor = Theme.Sidebar,
-                ForeColor = Theme.Muted,
-                IntegralHeight = false,
-                ItemHeight = 46,
-                DrawMode = DrawMode.OwnerDrawFixed,
-                Font = Theme.NavFont
-            };
-            _nav.DrawItem += DrawNavItem;
-            _nav.SelectedIndexChanged += (s, e) =>
-            {
-                if (_nav.SelectedIndex >= 0 && _nav.SelectedIndex < _modules.Count)
-                    Show(_modules[_nav.SelectedIndex]);
-            };
-            _nav.MouseMove += (s, e) =>
-            {
-                int i = _nav.IndexFromPoint(e.Location);
-                if (i != _hoverIndex) { _hoverIndex = i; _nav.Invalidate(); }
-            };
-            _nav.MouseLeave += (s, e) => { _hoverIndex = -1; _nav.Invalidate(); };
-
-            var sideFoot = new Label
-            {
-                Dock = DockStyle.Bottom,
-                Height = 96,
-                ForeColor = Theme.Muted2,
-                Font = new Font("Segoe UI", 8.5f),
-                Text = "Modular bench toolkit\r\nCamera coaching · USB trigger · ADB/Fastboot ·\r\npad finder · job database — one shell.\r\n\r\n" + MainForm.Credit,
-                Padding = new Padding(4, 8, 4, 0)
-            };
-
-            sidebar.Controls.Add(_nav);
-            sidebar.Controls.Add(sideFoot);
-            sidebar.Controls.Add(logo);
-
-            // ── main ──
-            var main = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Bg, Padding = new Padding(24, 18, 24, 0) };
-
-            _hero = new HeroCard();
-            _viewHost = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Bg };
-
-            var footer = new Panel { Dock = DockStyle.Bottom, Height = 34, BackColor = Theme.Bg };
-            _status = new Label { Dock = DockStyle.Fill, ForeColor = Theme.Muted, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9f) };
-            var ver = new Label { Dock = DockStyle.Right, AutoSize = false, Width = 260, ForeColor = Theme.Muted2, TextAlign = ContentAlignment.MiddleRight, Text = MainForm.Credit, Font = new Font("Segoe UI", 8.5f) };
-            footer.Controls.Add(_status);
-            footer.Controls.Add(ver);
-
-            main.Controls.Add(_viewHost);
-            main.Controls.Add(_hero);
-            main.Controls.Add(footer);
-
-            Controls.Add(main);
-            Controls.Add(sidebar);
-
-            FormClosing += (s, e) =>
-            {
-                _active?.Deactivate();
-                foreach (var m in _modules) m.Dispose();
-            };
+            Text = "Mobile Surgery — Bench Suite  v" + MainForm.AppVersion;
+            lblSideFoot.Text += "\r\n\r\n" + MainForm.Credit;
+            lblVersion.Text = MainForm.Credit;
         }
 
-        private Control BuildLogoCard()
+        private void ModuleHostForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            var card = new Card { Dock = DockStyle.Top, Height = 82, Radius = 16, Fill = Theme.Panel };
-            card.Paint += (s, e) =>
+            _active?.Deactivate();
+            foreach (var m in _modules) m.Dispose();
+        }
+
+        private void lstNav_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (lstNav.SelectedIndex >= 0 && lstNav.SelectedIndex < _modules.Count)
+                Show(_modules[lstNav.SelectedIndex]);
+        }
+
+        private void lstNav_MouseMove(object sender, MouseEventArgs e)
+        {
+            int i = lstNav.IndexFromPoint(e.Location);
+            if (i != _hoverIndex) { _hoverIndex = i; lstNav.Invalidate(); }
+        }
+
+        private void lstNav_MouseLeave(object sender, EventArgs e) { _hoverIndex = -1; lstNav.Invalidate(); }
+
+        /// <summary>Draws the logo mark; the name and subtitle are labels on the card.</summary>
+        private void cardLogo_Paint(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
+            int cx = 48, cy = cardLogo.Height / 2;
+            using (var glow = new SolidBrush(Color.FromArgb(40, Theme.Cyan)))
+                g.FillEllipse(glow, cx - 24, cy - 24, 48, 48);
+            using (var pen = new Pen(Theme.CyanDim, 1.4f))
+                g.DrawEllipse(pen, cx - 20, cy - 20, 40, 40);
+            using (var b = new SolidBrush(Theme.CyanBright))
+                g.FillEllipse(b, cx - 6, cy - 6, 12, 12);
+            using (var pen = new Pen(Theme.CyanBright, 1.4f))
             {
-                var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-                int cx = 48, cy = card.Height / 2;
-                using (var glow = new SolidBrush(Color.FromArgb(40, Theme.Cyan)))
-                    g.FillEllipse(glow, cx - 24, cy - 24, 48, 48);
-                using (var pen = new Pen(Theme.CyanDim, 1.4f))
-                    g.DrawEllipse(pen, cx - 20, cy - 20, 40, 40);
-                using (var b = new SolidBrush(Theme.CyanBright))
-                    g.FillEllipse(b, cx - 6, cy - 6, 12, 12);
-                using (var pen = new Pen(Theme.CyanBright, 1.4f))
-                {
-                    g.DrawLine(pen, cx, cy - 20, cx, cy - 13);
-                    g.DrawLine(pen, cx, cy + 13, cx, cy + 20);
-                    g.DrawLine(pen, cx - 20, cy, cx - 13, cy);
-                    g.DrawLine(pen, cx + 13, cy, cx + 20, cy);
-                }
-                using (var tf = new Font("Segoe UI", 13.5f, FontStyle.Bold))
-                using (var b = new SolidBrush(Theme.Text))
-                    g.DrawString("TESTPOINT", tf, b, 84, 18);
-                using (var sf = new Font("Segoe UI", 9f))
-                using (var b = new SolidBrush(Theme.Muted))
-                    g.DrawString("Bench Suite", sf, b, 86, 42);
-            };
-            return card;
+                g.DrawLine(pen, cx, cy - 20, cx, cy - 13);
+                g.DrawLine(pen, cx, cy + 13, cx, cy + 20);
+                g.DrawLine(pen, cx - 20, cy, cx - 13, cy);
+                g.DrawLine(pen, cx + 13, cy, cx + 20, cy);
+            }
         }
 
         private void DrawNavItem(object sender, DrawItemEventArgs e)
@@ -142,7 +80,7 @@ namespace TestPointTrigger.Modules
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var m = _modules[e.Index];
-            bool selected = e.Index == _nav.SelectedIndex;
+            bool selected = e.Index == lstNav.SelectedIndex;
             bool hover = e.Index == _hoverIndex;
 
             using (var bg = new SolidBrush(Theme.Sidebar)) g.FillRectangle(bg, e.Bounds);
@@ -186,14 +124,14 @@ namespace TestPointTrigger.Modules
         private void RebuildNav()
         {
             var keep = _active?.Id;
-            _nav.Items.Clear();
-            foreach (var m in _modules) _nav.Items.Add(m.Title);
+            lstNav.Items.Clear();
+            foreach (var m in _modules) lstNav.Items.Add(m.Title);
             if (keep != null)
             {
                 var i = _modules.FindIndex(m => string.Equals(m.Id, keep, StringComparison.OrdinalIgnoreCase));
-                if (i >= 0) _nav.SelectedIndex = i;
+                if (i >= 0) lstNav.SelectedIndex = i;
             }
-            else if (_nav.Items.Count > 0) _nav.SelectedIndex = 0;
+            else if (lstNav.Items.Count > 0) lstNav.SelectedIndex = 0;
         }
 
         private void Show(IModule module)
@@ -208,7 +146,6 @@ namespace TestPointTrigger.Modules
                 {
                     view = module.CreateView(this);
                     view.Dock = DockStyle.Fill;
-                    Theme.Apply(view);           // darken the module content to match the shell
                     _views[module.Id] = view;
                 }
                 catch (Exception ex)
@@ -225,12 +162,12 @@ namespace TestPointTrigger.Modules
                 }
             }
 
-            _viewHost.SuspendLayout();
-            _viewHost.Controls.Clear();
-            _viewHost.Controls.Add(view);
-            _viewHost.ResumeLayout();
+            pnlViewHost.SuspendLayout();
+            pnlViewHost.Controls.Clear();
+            pnlViewHost.Controls.Add(view);
+            pnlViewHost.ResumeLayout();
 
-            _hero.Set(module.Title, module.Description);
+            heroCard.Set(module.Title, module.Description);
             _active = module;
             SetStatus(module.Description);
             module.Activate();
@@ -240,8 +177,8 @@ namespace TestPointTrigger.Modules
 
         public void SetStatus(string text)
         {
-            if (_status == null) return;
-            Action set = () => _status.Text = text ?? string.Empty;
+            if (lblStatus == null) return;
+            Action set = () => lblStatus.Text = text ?? string.Empty;
             if (InvokeRequired) BeginInvoke(set); else set();
         }
 
@@ -259,7 +196,7 @@ namespace TestPointTrigger.Modules
         {
             var i = _modules.FindIndex(m => string.Equals(m.Id, moduleId, StringComparison.OrdinalIgnoreCase));
             if (i < 0) return false;
-            Action go = () => _nav.SelectedIndex = i;
+            Action go = () => lstNav.SelectedIndex = i;
             if (InvokeRequired) BeginInvoke(go); else go();
             return true;
         }

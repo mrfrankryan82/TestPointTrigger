@@ -1,4 +1,4 @@
-// TestPoint Trigger - Log viewer / query module
+﻿// TestPoint Trigger - Log viewer / query module
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
 using System;
 using System.Collections.Generic;
@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using TestPointTrigger.Modules.Views;
 
 namespace TestPointTrigger.Modules
 {
@@ -45,73 +46,32 @@ namespace TestPointTrigger.Modules
         {
             _host = host;
 
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(8) };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            // Layout and styling live in LogView.Designer.cs (open it in Design View).
+            var v = new LogView();
+            _search = v.txtSearch;
+            _source = v.cboSource;
+            _level = v.cboLevel;
+            _tail = v.chkLive;
+            _grid = v.grdLog;
+            _summary = v.lblSummary;
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-            _search = new TextBox { Width = 200 };
             _search.TextChanged += (s, e) => ApplyFilter();
-            _source = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-            _level = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
             _source.SelectedIndexChanged += (s, e) => ApplyFilter();
             _level.SelectedIndexChanged += (s, e) => ApplyFilter();
-            _tail = new CheckBox { Text = "Live", AutoSize = true, Checked = true, Margin = new Padding(8, 6, 8, 0) };
             _tail.CheckedChanged += (s, e) => { if (_tail.Checked) EnsureLive(); else DetachLive(); };
+            On(v.btnRefresh, Reload);
+            On(v.btnVerify, Verify);
+            On(v.btnSaveView, SaveView);
+            On(v.btnLoadFile, LoadFile);
+            On(v.btnOpenFolder, OpenFolder);
+            On(v.btnArchiveClear, ArchiveClear);
 
-            bar.Controls.AddRange(new Control[]
-            {
-                new Label { Text = "Search:", AutoSize = true, Margin = new Padding(0, 6, 4, 0) }, _search,
-                new Label { Text = "Source:", AutoSize = true, Margin = new Padding(8, 6, 4, 0) }, _source,
-                new Label { Text = "Level:", AutoSize = true, Margin = new Padding(8, 6, 4, 0) }, _level,
-                _tail,
-                Btn("Refresh", Reload), Btn("Verify", Verify), Btn("Save view…", SaveView),
-                Btn("Load file…", LoadFile), Btn("Open folder", OpenFolder), Btn("Archive & clear", ArchiveClear)
-            });
-
-            _grid = new DataGridView
-            {
-                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
-                RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                AutoGenerateColumns = false, AllowUserToResizeRows = false, Font = new Font("Consolas", 9f)
-            };
-            AddCol("Time", "Time", 140, "yyyy-MM-dd HH:mm:ss");
-            AddCol("Source", "Source", 90, null);
-            AddCol("Level", "Level", 70, null);
-            var msg = new DataGridViewTextBoxColumn
-            {
-                DataPropertyName = "Message", HeaderText = "Message",
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
-            };
-            _grid.Columns.Add(msg);
+            _grid.AutoGenerateColumns = false;   // columns are defined in the designer
             _grid.DataSource = _viewList;
-
-            _summary = new Label { AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(2, 4, 0, 0) };
-
-            root.Controls.Add(bar, 0, 0);
-            root.Controls.Add(_grid, 0, 1);
-            root.Controls.Add(_summary, 0, 2);
-            return root;
+            return v;
         }
 
-        private void AddCol(string prop, string header, int w, string format)
-        {
-            var col = new DataGridViewTextBoxColumn
-            {
-                DataPropertyName = prop, HeaderText = header, Width = w,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.None
-            };
-            if (format != null) col.DefaultCellStyle.Format = format;
-            _grid.Columns.Add(col);
-        }
-
-        private Button Btn(string text, Action a)
-        {
-            var b = new Button { Text = text, AutoSize = true, Margin = new Padding(3, 2, 0, 2) };
-            b.Click += (s, e) => a();
-            return b;
-        }
+        private static void On(Button b, Action a) => b.Click += (s, e) => a();
 
         public void Activate()
         {

@@ -1,4 +1,4 @@
-// TestPoint Trigger - forensic tools & licences module
+﻿// TestPoint Trigger - forensic tools & licences module
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
 using System;
 using System.Collections.Generic;
@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using TestPointTrigger.Modules.Views;
 
 namespace TestPointTrigger.Modules
 {
@@ -40,56 +41,38 @@ namespace TestPointTrigger.Modules
         {
             _host = host;
 
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(8) };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            // Layout and styling live in LicenseView.Designer.cs (open it in Design View).
+            var v = new LicenseView();
+            _search = v.txtSearch;
+            _category = v.cboCategory;
+            _status = v.cboStatus;
+            _grid = v.grdLicenses;
+            _count = v.lblCount;
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-            _search = new TextBox { Width = 180 };
+            _category.SelectedIndex = 0;
+            _status.SelectedIndex = 0;
             _search.TextChanged += (s, e) => Refilter();
-            _category = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-            _category.Items.AddRange(new object[] { "All categories", "Forensic", "Servicing", "FRP", "Flashing", "Other" });
-            _category.SelectedIndex = 0; _category.SelectedIndexChanged += (s, e) => Refilter();
-            _status = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
-            _status.Items.AddRange(new object[] { "All statuses", "Active", "Expired", "Suspended" });
-            _status.SelectedIndex = 0; _status.SelectedIndexChanged += (s, e) => Refilter();
+            _category.SelectedIndexChanged += (s, e) => Refilter();
+            _status.SelectedIndexChanged += (s, e) => Refilter();
+            On(v.btnAdd, Add);
+            On(v.btnEdit, EditSelected);
+            On(v.btnDuplicate, DuplicateSelected);
+            On(v.btnDelete, DeleteSelected);
+            On(v.btnCheckExpiries, CheckExpiries);
+            On(v.btnStats, ShowStats);
+            On(v.btnExportCsv, ExportCsv);
+            On(v.btnImportCsv, ImportCsv);
+            On(v.btnOpenPortal, OpenPortal);
+            On(v.btnOpenFolder, OpenFolder);
 
-            bar.Controls.AddRange(new Control[]
-            {
-                new Label { Text = "Search:", AutoSize = true, Margin = new Padding(0, 6, 4, 0) }, _search, _category, _status,
-                Btn("Add", Add), Btn("Edit", EditSelected), Btn("Duplicate", DuplicateSelected), Btn("Delete", DeleteSelected),
-                Btn("Check expiries", CheckExpiries), Btn("Stats", ShowStats),
-                Btn("Export CSV", ExportCsv), Btn("Import CSV", ImportCsv),
-                Btn("Open portal", OpenPortal), Btn("Open folder", OpenFolder)
-            });
-
-            _grid = new DataGridView
-            {
-                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
-                RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false, AutoGenerateColumns = false, AllowUserToResizeRows = false
-            };
-            AddCol("Tool", "Tool", 130, null);
-            AddCol("Vendor", "Vendor", 100, null);
-            AddCol("Category", "Category", 80, null);
-            AddCol("LicenseType", "Type", 90, null);
-            AddCol("Status", "Status", 70, null);
-            AddCol("Credits", "Credits", 60, null);
-            AddCol("ExpiryDate", "Expires", 90, "yyyy-MM-dd");
-            AddCol("HardwareId", "Dongle/HW ID", 120, null);
-            AddCol("Notes", "Notes", 180, null);
+            _grid.AutoGenerateColumns = false;   // columns are defined in the designer
             _grid.DataSource = _view;
             _grid.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) EditSelected(); };
             _grid.CellFormatting += ColourExpiry;
-
-            _count = new Label { AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(2, 4, 0, 0) };
-
-            root.Controls.Add(bar, 0, 0);
-            root.Controls.Add(_grid, 0, 1);
-            root.Controls.Add(_count, 0, 2);
-            return root;
+            return v;
         }
+
+        private static void On(Button b, Action a) => b.Click += (s, e) => a();
 
         private void ColourExpiry(object sender, DataGridViewCellFormattingEventArgs e)
         {
@@ -99,24 +82,6 @@ namespace TestPointTrigger.Modules
             if (days == null) return;
             if (days < 0) { e.CellStyle.BackColor = Color.MistyRose; e.CellStyle.ForeColor = Color.DarkRed; }
             else if (days <= ExpirySoonDays) { e.CellStyle.BackColor = Color.LightGoldenrodYellow; e.CellStyle.ForeColor = Color.Sienna; }
-        }
-
-        private void AddCol(string prop, string header, int w, string format)
-        {
-            var col = new DataGridViewTextBoxColumn
-            {
-                DataPropertyName = prop, HeaderText = header, Width = w,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.None
-            };
-            if (format != null) { col.DefaultCellStyle.Format = format; col.DefaultCellStyle.NullValue = ""; }
-            _grid.Columns.Add(col);
-        }
-
-        private Button Btn(string text, Action a)
-        {
-            var b = new Button { Text = text, AutoSize = true, Margin = new Padding(3, 2, 0, 2) };
-            b.Click += (s, e) => a();
-            return b;
         }
 
         public void Activate()

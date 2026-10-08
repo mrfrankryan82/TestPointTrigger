@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using OpenCvSharp;
 using OpenCvSharp.Extensions;
+using TestPointTrigger.Modules.Views;
 
 namespace TestPointTrigger.Modules
 {
@@ -40,69 +41,26 @@ namespace TestPointTrigger.Modules
         {
             _host = host;
 
-            var root = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
-                Padding = new Padding(8)
-            };
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60f));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
+            // Layout and styling live in LiveCoachView.Designer.cs (open it in Design View).
+            var v = new LiveCoachView();
+            _preview = v.picPreview;
+            _kind = v.cboKind;
+            _app = v.cboApp;
+            _host_ip = v.txtPhoneIp;
+            _log = v.lstLog;
 
-            _preview = new PictureBox
-            {
-                Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BackColor = Color.Black
-            };
-
-            var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-            right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            right.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-
-            // The right column is only 40% of the width, which is narrower than
-            // the sum of these controls. Without AutoSizeMode.GrowAndShrink the
-            // wrapped second row gets clipped and its buttons become unclickable.
-            var bar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
-                FlowDirection = FlowDirection.LeftToRight
-            };
-
-            _kind = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130 };
-            _kind.Items.AddRange(new object[] { "Local camera", "Phone camera" });
             _kind.SelectedIndex = 0;
-
-            _app = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110, Enabled = false };
-            _app.Items.AddRange(new object[] { "IP Webcam", "DroidCam", "RTSP", "Full URL" });
             _app.SelectedIndex = 0;
-
-            _host_ip = new TextBox { Width = 150, Enabled = false, Text = "192.168.1." };
-            var lblIp = new Label { Text = "Phone IP:", AutoSize = true, Padding = new Padding(6, 6, 0, 0) };
-
             _kind.SelectedIndexChanged += (s, e) =>
             {
                 var phone = _kind.SelectedIndex == 1;
                 _app.Enabled = phone; _host_ip.Enabled = phone;
             };
 
-            var bStart = new Button { Text = "Start watching", AutoSize = true };
-            var bStop = new Button { Text = "Stop", AutoSize = true };
-            bStart.Click += (s, e) => StartWatching();
-            bStop.Click += (s, e) => { Log("Stop clicked."); StopWatching(); Log("Stopped."); };
-            var bHelp = new Button { Text = "Quick start", AutoSize = true };
-            bHelp.Click += (s, e) => ShowQuickStart();
-            bar.Controls.AddRange(new Control[] { _kind, _app, lblIp, _host_ip, bStart, bStop, bHelp });
+            v.btnStart.Click += (s, e) => StartWatching();
+            v.btnStop.Click += (s, e) => { Log("Stop clicked."); StopWatching(); Log("Stopped."); };
+            v.btnQuickStart.Click += (s, e) => ShowQuickStart();
 
-            _log = new ListBox
-            {
-                Dock = DockStyle.Fill, IntegralHeight = false,
-                HorizontalScrollbar = true, Font = new Font("Consolas", 9f)
-            };
             _log.HandleCreated += (s, e) =>
             {
                 lock (_pending)
@@ -116,13 +74,8 @@ namespace TestPointTrigger.Modules
                 }
             };
 
-            right.Controls.Add(bar, 0, 0);
-            right.Controls.Add(_log, 0, 1);
-            root.Controls.Add(_preview, 0, 0);
-            root.Controls.Add(right, 1, 0);
-
             ShowQuickStart();
-            return root;
+            return v;
         }
 
         /// <summary>

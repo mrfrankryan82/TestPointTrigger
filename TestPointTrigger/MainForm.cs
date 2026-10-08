@@ -1,4 +1,4 @@
-// TestPoint Trigger - PCB Pad Finder
+﻿// TestPoint Trigger - PCB Pad Finder
 // Developer: HaKDMoDz™ · v2.0.0 · 2026-09-23
 using System;
 using System.Collections.Generic;
@@ -37,136 +37,92 @@ namespace TestPointTrigger
         readonly RenderOptions _ro = new RenderOptions();
         int _detectGen;
 
-        // controls
-        readonly CanvasPanel _canvas = new CanvasPanel();
-        readonly ToolStripStatusLabel _status = new ToolStripStatusLabel { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-        readonly ListView _list = new ListView { View = View.Details, FullRowSelect = true, HideSelection = false, Dock = DockStyle.Fill };
-        readonly ToolStripButton _bPan = new ToolStripButton("✋ Pan"), _bEdit = new ToolStripButton("✚ Edit pads"), _bCrop = new ToolStripButton("⬚ Crop to board"), _bBox = new ToolStripButton("▧ Box detect");
-        readonly ToolStripComboBox _style = new ToolStripComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
-        readonly NumericUpDown _labelSize = new NumericUpDown { Minimum = 4, Maximum = 60, DecimalPlaces = 1, Increment = 0.5M, Value = 11 };
-        readonly NumericUpDown _upscale = new NumericUpDown { Minimum = 1, Maximum = 6, DecimalPlaces = 1, Increment = 0.5M, Value = 3 };
+        // Controls are declared in MainForm.Designer.cs.
         readonly Timer _debounce = new Timer { Interval = 350 };
 
         public MainForm()
         {
-            Text = $"TestPoint Trigger — PCB Pad Finder  v{AppVersion}";
-            Size = new Size(1400, 900); StartPosition = FormStartPosition.CenterScreen;
-            Font = new Font("Segoe UI", 9f); KeyPreview = true; AllowDrop = true;
-            BuildUi();
+            // Layout, menus, toolbar and styling live in MainForm.Designer.cs (open it in Design View).
+            InitializeComponent();
+            Text = $"Mobile Surgery — PCB Pad Finder  v{AppVersion}";
+            lblCredit.Text = Credit;
+            canvas.MouseWheel += CanvasWheel;   // MouseWheel isn't listed in the designer's Events grid
+            tscStyle.SelectedIndex = 0;
+            InitSliders();
             SetMode(Mode.Edit);
             _debounce.Tick += (s, e) => { _debounce.Stop(); RunDetect(); };
-            DragEnter += (s, e) => { if (e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy; };
-            DragDrop += (s, e) => { var f = (string[])e.Data.GetData(DataFormats.FileDrop); if (f?.Length > 0) LoadImage(f[0]); };
-            KeyDown += OnKey;
             SetStatus("Open or drop a motherboard photo (Ctrl+O / Ctrl+V). Crop to the board, then fine-tune.");
         }
 
-        // ───────────────────────────── UI ─────────────────────────────
-        void BuildUi()
+        // ─────────────────────── Designer event handlers ───────────────────────
+        void mnuOpen_Click(object sender, EventArgs e) => OpenImage();
+        void mnuPaste_Click(object sender, EventArgs e) => PasteImage();
+        void mnuExportPng_Click(object sender, EventArgs e) => ExportPng();
+        void mnuExportCsv_Click(object sender, EventArgs e) => ExportCsv();
+        void mnuExit_Click(object sender, EventArgs e) => Close();
+        void mnuUndo_Click(object sender, EventArgs e) => Undo();
+        void mnuClearManual_Click(object sender, EventArgs e) { PushUndo(); _manual.Clear(); _suppressed.Clear(); Rebuild(); }
+        void mnuClearCrop_Click(object sender, EventArgs e) { _crop = null; RunDetect(); }
+        void mnuClearBox_Click(object sender, EventArgs e) { _boxDetected.Clear(); Rebuild(); SetStatus("Cleared box detections."); }
+        void mnuHowTo_Click(object sender, EventArgs e) => ShowHelp();
+        void mnuAbout_Click(object sender, EventArgs e) => MessageBox.Show(this,
+            $"Mobile Surgery — PCB Pad Finder\nVersion {AppVersion} ({BuildDate})\n\nDeveloper: HaKDMoDz™\n\nFinds gold and white/tinned test pads on motherboard photos and labels them for elimination probing.",
+            "About", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        void tsbDetect_Click(object sender, EventArgs e) => RunDetect();
+        void tsbPan_Click(object sender, EventArgs e) => SetMode(Mode.Pan);
+        void tsbEdit_Click(object sender, EventArgs e) => SetMode(Mode.Edit);
+        void tsbCrop_Click(object sender, EventArgs e) => SetMode(Mode.Crop);
+        void tsbBox_Click(object sender, EventArgs e) => SetMode(Mode.Box);
+        void tsbFit_Click(object sender, EventArgs e) => FitView();
+        void tscStyle_SelectedIndexChanged(object sender, EventArgs e)
         {
-            var menu = new MenuStrip();
-            var file = new ToolStripMenuItem("&File");
-            file.DropDownItems.Add(Mi("&Open image…", () => OpenImage(), Keys.Control | Keys.O));
-            file.DropDownItems.Add(Mi("&Paste image", () => PasteImage(), Keys.Control | Keys.V));
-            file.DropDownItems.Add(new ToolStripSeparator());
-            file.DropDownItems.Add(Mi("Export labelled &PNG…", () => ExportPng(), Keys.Control | Keys.S));
-            file.DropDownItems.Add("Export &CSV checklist…", null, (s, e) => ExportCsv());
-            file.DropDownItems.Add(new ToolStripSeparator());
-            file.DropDownItems.Add("E&xit", null, (s, e) => Close());
-            var edit = new ToolStripMenuItem("&Edit");
-            edit.DropDownItems.Add(Mi("&Undo", () => Undo(), Keys.Control | Keys.Z));
-            edit.DropDownItems.Add("Clear &manual edits", null, (s, e) => { PushUndo(); _manual.Clear(); _suppressed.Clear(); Rebuild(); });
-            edit.DropDownItems.Add("Clear c&rop", null, (s, e) => { _crop = null; RunDetect(); });
-            edit.DropDownItems.Add("Clear &box detections", null, (s, e) => { _boxDetected.Clear(); Rebuild(); SetStatus("Cleared box detections."); });
-            var help = new ToolStripMenuItem("&Help");
-            help.DropDownItems.Add("&How to use", null, (s, e) => ShowHelp());
-            help.DropDownItems.Add("&About", null, (s, e) => MessageBox.Show(this,
-                $"TestPoint Trigger — PCB Pad Finder\nVersion {AppVersion} ({BuildDate})\n\nDeveloper: HaKDMoDz™\n\nFinds gold and white/tinned test pads on motherboard photos and labels them for elimination probing.",
-                "About", MessageBoxButtons.OK, MessageBoxIcon.Information));
-            menu.Items.AddRange(new ToolStripItem[] { file, edit, help });
+            _ro.Style = tscStyle.SelectedIndex == 0 ? MarkStyle.LabelsOnly : MarkStyle.CirclesAndLabels;
+            canvas.Invalidate();
+        }
+        void chkPadKind_CheckedChanged(object sender, EventArgs e) { _ds.DetectGold = chkGold.Checked; _ds.DetectWhite = chkWhite.Checked; Queue(); }
+        void nudLabelSize_ValueChanged(object sender, EventArgs e) { _ro.LabelPx = (float)nudLabelSize.Value; canvas.Invalidate(); }
+        void btnLabelColour_Click(object sender, EventArgs e)
+        {
+            using (var cd = new ColorDialog { Color = _ro.LabelColor })
+                if (cd.ShowDialog(this) == DialogResult.OK) { _ro.LabelColor = cd.Color; canvas.Invalidate(); }
+        }
+        void btnResetDefaults_Click(object sender, EventArgs e)
+        {
+            if (MessageBox.Show(this, "Reset detection sliders to skill defaults?", "Reset", MessageBoxButtons.YesNo) == DialogResult.Yes) ResetSliders();
+        }
+        void lvPads_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            _sel = lvPads.SelectedIndices.Count > 0 ? lvPads.SelectedIndices[0] : -1;
+            if (_sel >= 0) CenterOn(_pads[_sel]);
+            canvas.Invalidate();
+        }
+        void canvas_Resize(object sender, EventArgs e) => canvas.Invalidate();
+        void MainForm_DragEnter(object sender, DragEventArgs e) { if (e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy; }
+        void MainForm_DragDrop(object sender, DragEventArgs e) { var f = (string[])e.Data.GetData(DataFormats.FileDrop); if (f?.Length > 0) LoadImage(f[0]); }
 
-            var tools = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, ImageScalingSize = new Size(20, 20) };
-            tools.Items.Add(new ToolStripButton("📂 Open", null, (s, e) => OpenImage()));
-            tools.Items.Add(new ToolStripButton("🔍 Detect", null, (s, e) => RunDetect()));
-            tools.Items.Add(new ToolStripSeparator());
-            _bPan.Click += (s, e) => SetMode(Mode.Pan); _bEdit.Click += (s, e) => SetMode(Mode.Edit); _bCrop.Click += (s, e) => SetMode(Mode.Crop); _bBox.Click += (s, e) => SetMode(Mode.Box);
-            tools.Items.AddRange(new ToolStripItem[] { _bPan, _bEdit, _bCrop, _bBox, new ToolStripSeparator() });
-            tools.Items.Add(new ToolStripLabel("Style:"));
-            _style.Items.AddRange(new object[] { "Labels only", "Circles + labels" }); _style.SelectedIndex = 0;
-            _style.SelectedIndexChanged += (s, e) => { _ro.Style = _style.SelectedIndex == 0 ? MarkStyle.LabelsOnly : MarkStyle.CirclesAndLabels; _canvas.Invalidate(); };
-            tools.Items.Add(_style);
-            tools.Items.Add(new ToolStripSeparator());
-            tools.Items.Add(new ToolStripButton("⤢ Fit", null, (s, e) => FitView()));
-            tools.Items.Add(new ToolStripButton("↶ Undo", null, (s, e) => Undo()));
-            tools.Items.Add(new ToolStripButton("💾 Export PNG", null, (s, e) => ExportPng()));
-            tools.Items.Add(new ToolStripButton("📄 Export CSV", null, (s, e) => ExportCsv()));
+        // ─────────────────────── Detection sliders ───────────────────────
+        // Each TrackBar's Value in the designer is its default (what "Reset defaults" returns to).
+        sealed class Slider { public TrackBar Bar; public Label Caption; public string Name; public int Default; public Action<int> Apply; public Func<int, string> Format; }
+        readonly List<Slider> _sliders = new List<Slider>();
 
-            var statusStrip = new StatusStrip();
-            statusStrip.Items.Add(_status);
-            statusStrip.Items.Add(new ToolStripStatusLabel(Credit) { ForeColor = Color.DimGray });
-
-            // right panel
-            var side = new Panel { Dock = DockStyle.Right, Width = 300, Padding = new Padding(8) };
-            var tbl = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1 };
-            AddHeader(tbl, "Detection");
-            AddSlider(tbl, "Min pad radius (px)", 2, 40, 4, v => _ds.MinRadiusPx = v, v => v + " px");
-            AddSlider(tbl, "Max pad radius (px)", 10, 200, 45, v => _ds.MaxRadiusPx = v, v => v + " px");
-            AddSlider(tbl, "Core roundness", 15, 80, 35, v => _ds.CircMin = v / 100.0, v => (v / 100.0).ToString("0.00"));
-            var cbRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
-            var cbGold = new CheckBox { Text = "Gold pads", Checked = true, AutoSize = true };
-            var cbWhite = new CheckBox { Text = "White/tinned pads", Checked = true, AutoSize = true };
-            cbGold.CheckedChanged += (s, e) => { _ds.DetectGold = cbGold.Checked; Queue(); };
-            cbWhite.CheckedChanged += (s, e) => { _ds.DetectWhite = cbWhite.Checked; Queue(); };
-            cbRow.Controls.AddRange(new Control[] { cbGold, cbWhite }); tbl.Controls.Add(cbRow);
-
-            AddHeader(tbl, "Labels & export");
-            tbl.Controls.Add(LabeledRow("Label size (px)", _labelSize));
-            tbl.Controls.Add(LabeledRow("Export upscale ×", _upscale));
-            _labelSize.ValueChanged += (s, e) => { _ro.LabelPx = (float)_labelSize.Value; _canvas.Invalidate(); };
-            var colorBtn = new Button { Text = "Label colour…", AutoSize = true };
-            colorBtn.Click += (s, e) => { using (var cd = new ColorDialog { Color = _ro.LabelColor }) if (cd.ShowDialog(this) == DialogResult.OK) { _ro.LabelColor = cd.Color; _canvas.Invalidate(); } };
-            var reset = new Button { Text = "Reset defaults", AutoSize = true };
-            reset.Click += (s, e) => { if (MessageBox.Show(this, "Reset detection sliders to skill defaults?", "Reset", MessageBoxButtons.YesNo) == DialogResult.Yes) ResetSliders(tbl); };
-            var btnRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill }; btnRow.Controls.AddRange(new Control[] { colorBtn, reset });
-            tbl.Controls.Add(btnRow);
-            AddHeader(tbl, "Pads (click to locate)");
-
-            _list.Columns.Add("#", 40); _list.Columns.Add("X", 60); _list.Columns.Add("Y", 60); _list.Columns.Add("Source", 90);
-            _list.SelectedIndexChanged += (s, e) => { _sel = _list.SelectedIndices.Count > 0 ? _list.SelectedIndices[0] : -1; if (_sel >= 0) CenterOn(_pads[_sel]); _canvas.Invalidate(); };
-            var listHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 4, 0, 0) }; listHost.Controls.Add(_list);
-            side.Controls.Add(listHost); side.Controls.Add(tbl);
-
-            _canvas.Dock = DockStyle.Fill; _canvas.BackColor = Color.FromArgb(24, 24, 28);
-            _canvas.Paint += PaintCanvas; _canvas.MouseDown += CanvasDown; _canvas.MouseMove += CanvasMove; _canvas.MouseUp += CanvasUp;
-            _canvas.MouseWheel += CanvasWheel; _canvas.Resize += (s, e) => _canvas.Invalidate();
-
-            Controls.Add(_canvas); Controls.Add(side); Controls.Add(tools); Controls.Add(menu); Controls.Add(statusStrip);
-            MainMenuStrip = menu;
+        void InitSliders()
+        {
+            _sliders.Add(new Slider { Bar = tbMinRadius, Caption = lblMinRadius, Name = "Min pad radius (px)", Apply = v => _ds.MinRadiusPx = v, Format = v => v + " px" });
+            _sliders.Add(new Slider { Bar = tbMaxRadius, Caption = lblMaxRadius, Name = "Max pad radius (px)", Apply = v => _ds.MaxRadiusPx = v, Format = v => v + " px" });
+            _sliders.Add(new Slider { Bar = tbRoundness, Caption = lblRoundness, Name = "Core roundness", Apply = v => _ds.CircMin = v / 100.0, Format = v => (v / 100.0).ToString("0.00") });
+            foreach (var s in _sliders) { s.Default = s.Bar.Value; ApplySlider(s); }
         }
 
-        static ToolStripMenuItem Mi(string t, Action a, Keys k) => new ToolStripMenuItem(t, null, (s, e) => a()) { ShortcutKeys = k };
+        void ApplySlider(Slider s) { s.Apply(s.Bar.Value); s.Caption.Text = $"{s.Name}: {s.Format(s.Bar.Value)}"; }
 
-        readonly List<(TrackBar tb, int def)> _sliders = new List<(TrackBar, int)>();
-        void AddHeader(TableLayoutPanel t, string text) =>
-            t.Controls.Add(new Label { Text = text, Font = new Font(Font, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 10, 0, 2) });
-
-        void AddSlider(TableLayoutPanel t, string name, int min, int max, int def, Action<int> apply, Func<int, string> fmt)
+        void Slider_ValueChanged(object sender, EventArgs e)
         {
-            var lbl = new Label { AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
-            var tb = new TrackBar { Minimum = min, Maximum = max, Value = def, TickStyle = TickStyle.None, Width = 270, Height = 28, AutoSize = false };
-            tb.ValueChanged += (s, e) => { apply(tb.Value); lbl.Text = $"{name}: {fmt(tb.Value)}"; Queue(); };
-            apply(def); lbl.Text = $"{name}: {fmt(def)}";
-            t.Controls.Add(lbl); t.Controls.Add(tb); _sliders.Add((tb, def));
+            var s = _sliders.Find(x => x.Bar == sender);
+            if (s == null) return;
+            ApplySlider(s); Queue();
         }
 
-        void ResetSliders(TableLayoutPanel t) { foreach (var (tb, def) in _sliders) tb.Value = def; }
-
-        static Control LabeledRow(string text, Control c)
-        {
-            var p = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
-            c.Width = 70; p.Controls.Add(new Label { Text = text, AutoSize = true, Width = 150, Margin = new Padding(0, 6, 8, 0) }); p.Controls.Add(c);
-            return p;
-        }
+        void ResetSliders() { foreach (var s in _sliders) s.Bar.Value = s.Default; }
 
         void SetMode(Mode m)
         {
@@ -174,15 +130,15 @@ namespace TestPointTrigger
             // your set region by region instead of starting from the flood.
             if (m == Mode.Box && _detected.Count > 0) { _detected.Clear(); Rebuild(); }
 
-            _mode = m; _bPan.Checked = m == Mode.Pan; _bEdit.Checked = m == Mode.Edit; _bCrop.Checked = m == Mode.Crop; _bBox.Checked = m == Mode.Box;
-            _canvas.Cursor = m == Mode.Pan ? Cursors.Hand : Cursors.Cross;
+            _mode = m; tsbPan.Checked = m == Mode.Pan; tsbEdit.Checked = m == Mode.Edit; tsbCrop.Checked = m == Mode.Crop; tsbBox.Checked = m == Mode.Box;
+            canvas.Cursor = m == Mode.Pan ? Cursors.Hand : Cursors.Cross;
             SetStatus(m == Mode.Edit ? "Edit: left-click adds a pad (snaps to centre) · right-click removes · wheel zooms · middle-drag pans"
                     : m == Mode.Crop ? "Crop: drag a rectangle around the board (exclude battery label and bezel)"
                     : m == Mode.Box ? "Box detect: drag a rectangle to detect pads only inside it. Each box adds to your set; Edit (E) to curate."
                     : "Pan: drag to move · wheel zooms");
         }
 
-        void SetStatus(string s) => _status.Text = s;
+        void SetStatus(string s) => lblStatus.Text = s;
 
         // ─────────────────────────── Image I/O ───────────────────────────
         void OpenImage()
@@ -267,11 +223,11 @@ namespace TestPointTrigger
             var rs = all.Select(p => p.R).OrderBy(r => r).ToList();
             double band = rs.Count > 0 ? Math.Max(10, rs[rs.Count / 2] * 3) : 30;
             _pads = PadDetector.Order(all, band);
-            _list.BeginUpdate(); _list.Items.Clear();
+            lvPads.BeginUpdate(); lvPads.Items.Clear();
             for (int i = 0; i < _pads.Count; i++)
-                _list.Items.Add(new ListViewItem(new[] { (i + 1).ToString(), ((int)_pads[i].X).ToString(), ((int)_pads[i].Y).ToString(), _pads[i].Manual ? "manual" : $"auto {_pads[i].Circularity:0.00}" }));
-            _list.EndUpdate();
-            _sel = -1; _canvas.Invalidate();
+                lvPads.Items.Add(new ListViewItem(new[] { (i + 1).ToString(), ((int)_pads[i].X).ToString(), ((int)_pads[i].Y).ToString(), _pads[i].Manual ? "manual" : $"auto {_pads[i].Circularity:0.00}" }));
+            lvPads.EndUpdate();
+            _sel = -1; canvas.Invalidate();
         }
 
         static double Dist(PointF a, Pad p) => Math.Sqrt(Math.Pow(a.X - p.X, 2) + Math.Pow(a.Y - p.Y, 2));
@@ -296,15 +252,15 @@ namespace TestPointTrigger
         {
             if (_bmp == null) return;
             var r = _crop ?? new Rectangle(0, 0, _bmp.Width, _bmp.Height);
-            _zoom = Math.Min((_canvas.Width - 20f) / r.Width, (_canvas.Height - 20f) / r.Height);
-            _off = new PointF(_canvas.Width / 2f - (r.X + r.Width / 2f) * _zoom, _canvas.Height / 2f - (r.Y + r.Height / 2f) * _zoom);
-            _canvas.Invalidate();
+            _zoom = Math.Min((canvas.Width - 20f) / r.Width, (canvas.Height - 20f) / r.Height);
+            _off = new PointF(canvas.Width / 2f - (r.X + r.Width / 2f) * _zoom, canvas.Height / 2f - (r.Y + r.Height / 2f) * _zoom);
+            canvas.Invalidate();
         }
 
         void CenterOn(Pad p)
         {
             _zoom = Math.Max(_zoom, 3f);
-            _off = new PointF(_canvas.Width / 2f - (float)p.X * _zoom, _canvas.Height / 2f - (float)p.Y * _zoom);
+            _off = new PointF(canvas.Width / 2f - (float)p.X * _zoom, canvas.Height / 2f - (float)p.Y * _zoom);
         }
 
         void PaintCanvas(object sender, PaintEventArgs e)
@@ -312,7 +268,7 @@ namespace TestPointTrigger
             var g = e.Graphics;
             if (_bmp == null)
             {
-                TextRenderer.DrawText(g, "Drop a motherboard photo here\nor press Ctrl+O", new Font("Segoe UI", 16f), _canvas.ClientRectangle, Color.Gray,
+                TextRenderer.DrawText(g, "Drop a motherboard photo here\nor press Ctrl+O", new Font("Segoe UI", 16f), canvas.ClientRectangle, Color.Gray,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 return;
             }
@@ -339,7 +295,7 @@ namespace TestPointTrigger
         void DimOutside(Graphics g, Rectangle c)
         {
             var a = ToScreen(c.Location); var rc = new RectangleF(a.X, a.Y, c.Width * _zoom, c.Height * _zoom);
-            using (var reg = new Region(_canvas.ClientRectangle)) using (var br = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
+            using (var reg = new Region(canvas.ClientRectangle)) using (var br = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
             { reg.Exclude(rc); g.FillRegion(br, reg); }
             using (var pen = new Pen(Color.DeepSkyBlue, 1.5f)) g.DrawRectangle(pen, rc.X, rc.Y, rc.Width, rc.Height);
         }
@@ -347,7 +303,7 @@ namespace TestPointTrigger
         // ─────────────────────────── Mouse ───────────────────────────
         void CanvasDown(object sender, MouseEventArgs e)
         {
-            _canvas.Focus();
+            canvas.Focus();
             if (_bmp == null) return;
             if (e.Button == MouseButtons.Middle || (e.Button == MouseButtons.Left && _mode == Mode.Pan))
             { _panning = true; _dragStart = e.Location; _panOrigin = _off; return; }
@@ -366,7 +322,7 @@ namespace TestPointTrigger
             }
             else if (e.Button == MouseButtons.Left)
             {
-                if (hit >= 0) { _sel = hit; _list.Items[hit].Selected = true; _list.EnsureVisible(hit); _canvas.Invalidate(); return; }
+                if (hit >= 0) { _sel = hit; lvPads.Items[hit].Selected = true; lvPads.EnsureVisible(hit); canvas.Invalidate(); return; }
                 var rs = _pads.Select(p => p.R).OrderBy(r => r).ToList();
                 double defR = rs.Count > 0 ? rs[rs.Count / 2] : 6;
                 var np = PadDetector.Snap(_mat, ip.X, ip.Y, defR);
@@ -389,18 +345,18 @@ namespace TestPointTrigger
 
         void CanvasMove(object sender, MouseEventArgs e)
         {
-            if (_panning) { _off = new PointF(_panOrigin.X + e.X - _dragStart.X, _panOrigin.Y + e.Y - _dragStart.Y); _canvas.Invalidate(); return; }
+            if (_panning) { _off = new PointF(_panOrigin.X + e.X - _dragStart.X, _panOrigin.Y + e.Y - _dragStart.Y); canvas.Invalidate(); return; }
             if (_cropDrag.HasValue)
             {
                 var a = ToImage(_dragStart); var b = ToImage(e.Location);
                 _cropDrag = Rectangle.FromLTRB((int)Math.Min(a.X, b.X), (int)Math.Min(a.Y, b.Y), (int)Math.Max(a.X, b.X), (int)Math.Max(a.Y, b.Y));
-                _canvas.Invalidate();
+                canvas.Invalidate();
             }
             else if (_boxDrag.HasValue)
             {
                 var a = ToImage(_dragStart); var b = ToImage(e.Location);
                 _boxDrag = Rectangle.FromLTRB((int)Math.Min(a.X, b.X), (int)Math.Min(a.Y, b.Y), (int)Math.Max(a.X, b.X), (int)Math.Max(a.Y, b.Y));
-                _canvas.Invalidate();
+                canvas.Invalidate();
             }
         }
 
@@ -411,13 +367,13 @@ namespace TestPointTrigger
             {
                 var r = Rectangle.Intersect(_cropDrag.Value, new Rectangle(0, 0, _bmp.Width, _bmp.Height)); _cropDrag = null;
                 if (r.Width > 20 && r.Height > 20) { _crop = r; SetMode(Mode.Edit); RunDetect(); }
-                _canvas.Invalidate();
+                canvas.Invalidate();
             }
             else if (_boxDrag.HasValue)
             {
                 var r = Rectangle.Intersect(_boxDrag.Value, new Rectangle(0, 0, _bmp.Width, _bmp.Height)); _boxDrag = null;
                 if (r.Width > 16 && r.Height > 16) RunBoxDetect(r);
-                _canvas.Invalidate();
+                canvas.Invalidate();
             }
         }
 
@@ -427,7 +383,7 @@ namespace TestPointTrigger
             var ip = ToImage(e.Location);
             _zoom = Math.Max(0.05f, Math.Min(40f, _zoom * (e.Delta > 0 ? 1.2f : 1 / 1.2f)));
             _off = new PointF(e.X - ip.X * _zoom, e.Y - ip.Y * _zoom);
-            _canvas.Invalidate();
+            canvas.Invalidate();
         }
 
         void OnKey(object sender, KeyEventArgs e)
@@ -457,7 +413,7 @@ namespace TestPointTrigger
             {
                 if (d.ShowDialog(this) != DialogResult.OK) return;
                 var crop = _crop ?? new Rectangle(0, 0, _bmp.Width, _bmp.Height);
-                float up = (float)_upscale.Value;
+                float up = (float)nudUpscale.Value;
                 long px = (long)(crop.Width * up) * (long)(crop.Height * up);
                 if (px > 180_000_000) { MessageBox.Show(this, "Export too large — lower the upscale or crop to the board.", "Export"); return; }
                 using (var bmp = PadRenderer.Export(_bmp, crop, _pads, _ro, up, $"{Credit} · {_pads.Count} pads"))
@@ -497,7 +453,7 @@ namespace TestPointTrigger
             "Candidates only — confirm the real test point by probing.", "How to use");
     }
 
-    class CanvasPanel : Panel
+    public class CanvasPanel : Panel
     {
         public CanvasPanel() { DoubleBuffered = true; ResizeRedraw = true; SetStyle(ControlStyles.Selectable, true); TabStop = true; }
     }

@@ -354,7 +354,7 @@ namespace TestPointTrigger.Modules
     /// part colours follow the state of the wiring steps that mention them, so
     /// the bench build can be read at a glance. Click a part to jump to its step.
     /// </summary>
-    internal sealed class WiringPanel : Panel
+    public sealed class WiringPanel : Panel
     {
         private sealed class PinRow { public string Label, Node, Note; }
         private sealed class NodeBox { public string Id, Title, Sub; public int R0, R1; public Rectangle Rect; }
@@ -410,7 +410,7 @@ namespace TestPointTrigger.Modules
                 n.Rect = new Rectangle(NodeX, Top0 + n.R0 * RowH + 3, NodeW, (n.R1 - n.R0 + 1) * RowH - 6);
         }
 
-        public void SetSteps(IList<WiringStep> steps) { _steps = steps; Invalidate(); }
+        internal void SetSteps(IList<WiringStep> steps) { _steps = steps; Invalidate(); }
         public void Highlight(string nodesCsv) { _selected = nodesCsv ?? ""; Invalidate(); }
 
         private StepState NodeState(string id)

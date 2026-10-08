@@ -1,4 +1,4 @@
-// TestPoint Trigger - USB Hub Trigger module
+﻿// TestPoint Trigger - USB Hub Trigger module
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
 using System;
 using System.Collections.Generic;
@@ -13,6 +13,7 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using TestPointTrigger.Modules.Views;
 
 namespace TestPointTrigger.Modules
 {
@@ -75,109 +76,29 @@ namespace TestPointTrigger.Modules
             _host = host;
             LoadImages();
 
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8, Padding = new Padding(12) };
-            for (int i = 0; i < 7; i++) root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            // Layout and styling live in UsbTriggerView.Designer.cs (open it in Design View).
+            var v = new UsbTriggerView();
+            v.flpAdminBanner.Visible = !_elevated;   // pnputil cannot touch device nodes without admin
+            v.btnRestartAdmin.Click += (s, e) => RelaunchElevated();
 
-            // Elevation banner - pnputil cannot touch device nodes without admin.
-            var banner = Flow();
-            banner.BackColor = Color.FromArgb(255, 244, 206);
-            banner.ForeColor = Color.FromArgb(74, 48, 0);      // dark brown text on the pale-yellow banner
-            banner.Padding = new Padding(6);
-            banner.Visible = !_elevated;
-            // Explicit colours so the dark theme (which only restyles default-coloured
-            // controls) doesn't hand this button the banner's pale background + light text.
-            var bRestart = new Button
-            {
-                Text = "Restart as Administrator", AutoSize = true,
-                FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(150, 82, 0), ForeColor = Color.White,
-                Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold), Padding = new Padding(6, 2, 6, 2)
-            };
-            bRestart.FlatAppearance.BorderColor = Color.FromArgb(110, 58, 0);
-            bRestart.FlatAppearance.MouseOverBackColor = Color.FromArgb(175, 98, 0);
-            bRestart.Click += (s, e) => RelaunchElevated();
-            banner.Controls.Add(new Label
-            {
-                Text = "Not running as Administrator — disabling/enabling hubs needs admin rights.",
-                AutoSize = true, Margin = new Padding(0, 8, 8, 0), ForeColor = Color.FromArgb(74, 48, 0)
-            });
-            banner.Controls.Add(bRestart);
+            _devices = v.cboDevices;
+            _refresh = v.btnRefresh;
+            _seconds = v.nudSeconds;
+            _timeLeft = v.lblTimeLeft;
+            _toggle = v.btnToggle;
+            _reenableAll = v.btnReenableAll;
+            _voiceOn = v.chkVoice;
+            _phrases = v.txtPhrases;
+            _confidence = v.nudConfidence;
+            _log = v.txtLog;
+            _ui = v;
 
-            var lblDev = new Label { Text = "USB hub / controller to arm:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
-
-            var devRow = Flow();
-            _devices = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 520 };
-            _refresh = new Button { Text = "Refresh", AutoSize = true };
             _refresh.Click += (s, e) => RefreshDevices();
-            devRow.Controls.AddRange(new Control[] { _devices, _refresh });
-
-            var cdRow = Flow();
-            _seconds = new NumericUpDown { Minimum = 3, Maximum = 120, Value = 10, Width = 60 };
-            _timeLeft = new Label
-            {
-                Text = "--", AutoSize = true, MinimumSize = new Size(90, 0),
-                Font = new Font("Segoe UI", 20f, FontStyle.Bold), Margin = new Padding(8, 0, 0, 0)
-            };
-            cdRow.Controls.AddRange(new Control[]
-            {
-                new Label { Text = "Countdown (seconds, fallback if you don't hit the hotkey):", AutoSize = true, Margin = new Padding(0, 6, 4, 0) },
-                _seconds,
-                new Label { Text = "Time left:", AutoSize = true, Margin = new Padding(24, 6, 0, 0) },
-                _timeLeft
-            });
-
-            var actRow = Flow();
-            _toggle = new Button
-            {
-                Size = new Size(380, 52), FlatStyle = FlatStyle.Flat,
-                TextImageRelation = TextImageRelation.ImageBeforeText,
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold)
-            };
             _toggle.Click += async (s, e) => await OnToggleAsync();
-            _reenableAll = new Button { Text = "Re-enable All", Size = new Size(180, 52) };
             _reenableAll.Click += async (s, e) => await ReenableAllAsync();
-            actRow.Controls.AddRange(new Control[] { _toggle, _reenableAll });
-
-            // Voice trigger: offline, only acts while armed.
-            var voiceRow = Flow();
-            _voiceOn = new CheckBox { Text = "Voice trigger", AutoSize = true, Margin = new Padding(0, 6, 12, 0) };
-            _phrases = new TextBox { Text = "go, trigger, enable now", Width = 220 };
-            _confidence = new NumericUpDown { Minimum = 40, Maximum = 99, Value = 70, Width = 55 };
             _voiceOn.CheckedChanged += (s, e) => ToggleVoice();
             _phrases.Leave += (s, e) => { if (_voiceOn.Checked) ToggleVoice(); };      // re-load new phrases
             _confidence.ValueChanged += (s, e) => { if (_voice != null) _voice.MinConfidence = (float)_confidence.Value / 100f; };
-            voiceRow.Controls.AddRange(new Control[]
-            {
-                _voiceOn,
-                new Label { Text = "Say any of:", AutoSize = true, Margin = new Padding(0, 6, 4, 0) },
-                _phrases,
-                new Label { Text = "Min confidence %:", AutoSize = true, Margin = new Padding(12, 6, 4, 0) },
-                _confidence
-            });
-
-            var hint = new Label
-            {
-                Text = "Global hotkeys (work from any module, even unfocused): Ctrl+Alt+D disable/arm, Ctrl+Alt+E enable now.\r\n" +
-                       "If your keyboard or a USB microphone shares the hub you disable, that trigger dies with it — the countdown is your fallback.",
-                AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(0, 6, 0, 6)
-            };
-
-            _log = new TextBox
-            {
-                Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 10f),
-                BackColor = SystemColors.Window
-            };
-
-            root.Controls.Add(banner, 0, 0);
-            root.Controls.Add(lblDev, 0, 1);
-            root.Controls.Add(devRow, 0, 2);
-            root.Controls.Add(cdRow, 0, 3);
-            root.Controls.Add(actRow, 0, 4);
-            root.Controls.Add(voiceRow, 0, 5);
-            root.Controls.Add(hint, 0, 6);
-            root.Controls.Add(_log, 0, 7);
-            _ui = root;
 
             _countdown.Tick += async (s, e) =>
             {
@@ -189,14 +110,8 @@ namespace TestPointTrigger.Modules
             RegisterHotkeys();
             if (!_elevated) Log("Not elevated: use 'Restart as Administrator' before arming.");
             UpdateUi();
-            return root;
+            return v;
         }
-
-        private static FlowLayoutPanel Flow() => new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            WrapContents = true, Margin = new Padding(0, 2, 0, 2)
-        };
 
         public void Activate()
         {

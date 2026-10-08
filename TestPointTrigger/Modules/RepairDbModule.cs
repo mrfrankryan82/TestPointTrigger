@@ -1,4 +1,4 @@
-// TestPoint Trigger - Completed repairs database module
+﻿// TestPoint Trigger - Completed repairs database module
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
 using System;
 using System.Collections.Generic;
@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using TestPointTrigger.Modules.Views;
 
 namespace TestPointTrigger.Modules
 {
@@ -38,71 +39,34 @@ namespace TestPointTrigger.Modules
         {
             _host = host;
 
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(8) };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            // Layout and styling live in RepairDbView.Designer.cs (open it in Design View).
+            var v = new RepairDbView();
+            _search = v.txtSearch;
+            _outcome = v.cboOutcome;
+            _grid = v.grdRepairs;
+            _count = v.lblCount;
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-            _search = new TextBox { Width = 200 };
-            _search.TextChanged += (s, e) => Refilter();
-            _outcome = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-            _outcome.Items.AddRange(new object[] { "All outcomes", "Success", "Partial", "Failed", "Abandoned" });
             _outcome.SelectedIndex = 0;
+            _search.TextChanged += (s, e) => Refilter();
             _outcome.SelectedIndexChanged += (s, e) => Refilter();
-            bar.Controls.AddRange(new Control[]
-            {
-                new Label { Text = "Search:", AutoSize = true, Margin = new Padding(0, 6, 4, 0) }, _search, _outcome,
-                Btn("Add", Add), Btn("Edit", EditSelected), Btn("Duplicate", DuplicateSelected),
-                Btn("Delete", DeleteSelected), Btn("Stats", ShowStats),
-                Btn("Export CSV", ExportCsv), Btn("Import CSV", ImportCsv),
-                Btn("Open image", OpenImage), Btn("Backup now", () => { _store.Save(); Info("Backup written."); }),
-                Btn("Open folder", OpenFolder)
-            });
+            On(v.btnAdd, Add);
+            On(v.btnEdit, EditSelected);
+            On(v.btnDuplicate, DuplicateSelected);
+            On(v.btnDelete, DeleteSelected);
+            On(v.btnStats, ShowStats);
+            On(v.btnExportCsv, ExportCsv);
+            On(v.btnImportCsv, ImportCsv);
+            On(v.btnOpenImage, OpenImage);
+            On(v.btnBackupNow, () => { _store.Save(); Info("Backup written."); });
+            On(v.btnOpenFolder, OpenFolder);
 
-            _grid = new DataGridView
-            {
-                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
-                RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false, AutoGenerateColumns = false, AllowUserToResizeRows = false
-            };
-            AddCol("Date", "Date", 90);
-            AddCol("Brand", "Brand", 90);
-            AddCol("Model", "Model", 140);
-            AddCol("Chipset", "Chipset", 90);
-            AddCol("Procedure", "Procedure", 150);
-            AddCol("Outcome", "Outcome", 80);
-            AddCol("TestPoint", "Test point", 130);
-            AddCol("TimeMinutes", "Min", 50);
-            AddCol("Notes", "Notes", 220);
+            _grid.AutoGenerateColumns = false;   // columns are defined in the designer
             _grid.DataSource = _view;
             _grid.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) EditSelected(); };
-
-            _count = new Label { AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(2, 4, 0, 0) };
-
-            root.Controls.Add(bar, 0, 0);
-            root.Controls.Add(_grid, 0, 1);
-            root.Controls.Add(_count, 0, 2);
-            return root;
+            return v;
         }
 
-        private void AddCol(string prop, string header, int w)
-        {
-            var col = new DataGridViewTextBoxColumn
-            {
-                DataPropertyName = prop, HeaderText = header, Width = w,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.None
-            };
-            if (prop == "Date") col.DefaultCellStyle.Format = "yyyy-MM-dd";
-            _grid.Columns.Add(col);
-        }
-
-        private Button Btn(string text, Action a)
-        {
-            var b = new Button { Text = text, AutoSize = true, Margin = new Padding(3, 2, 0, 2) };
-            b.Click += (s, e) => a();
-            return b;
-        }
+        private static void On(Button b, Action a) => b.Click += (s, e) => a();
 
         public void Activate()
         {

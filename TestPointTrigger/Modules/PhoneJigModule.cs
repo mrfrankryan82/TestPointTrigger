@@ -1,4 +1,4 @@
-// TestPoint Trigger - Phone Jig module: Mega jig control, wiring verification, auto device profiling, workbook export
+﻿// TestPoint Trigger - Phone Jig module: Mega jig control, wiring verification, auto device profiling, workbook export
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-10-09
 using System;
 using System.Collections.Generic;
@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Newtonsoft.Json;
+using TestPointTrigger.Modules.Views;
 
 namespace TestPointTrigger.Modules
 {
@@ -18,7 +19,7 @@ namespace TestPointTrigger.Modules
     ///   Wiring  : guided build checklist with live electrical checks and a colour-coded diagram.
     ///   Jig     : every serial command of the sketch as buttons.
     ///   Device  : autonomous per-phone profiling on first ADB/fastboot connection (cached by serial).
-    ///   Devices : the profile database and the Google-Sheets-ready workbook export.
+    ///   Hardware History : the profile database and the Google-Sheets-ready workbook export.
     /// </summary>
     public class PhoneJigModule : IModule
     {
@@ -67,9 +68,11 @@ namespace TestPointTrigger.Modules
         private readonly HashSet<string> _handled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _warned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // devices tab
+        // hardware history tab
         private DataGridView _grid;
         private Label _gridInfo;
+        private PhoneJigView _view;
+        private ToolTip _tips;
 
         // ───────────────────────────── view ─────────────────────────────
 
@@ -80,53 +83,57 @@ namespace TestPointTrigger.Modules
             _steps = WiringGuide.Build();
             _link.Line += OnJigLine;
 
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(6) };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150f));
+            // Layout and styling live in PhoneJigView.Designer.cs (open it in Design View).
+            var v = _view = new PhoneJigView();
+            _root = v;
 
-            root.Controls.Add(BuildTopBar(), 0, 0);
-            var tabs = new TabControl { Dock = DockStyle.Fill };
-            tabs.TabPages.Add(Page("Wiring", BuildWiringTab()));
-            tabs.TabPages.Add(Page("Jig", BuildJigTab()));
-            tabs.TabPages.Add(Page("Device", BuildDeviceTab()));
-            tabs.TabPages.Add(Page("Devices", BuildDevicesTab()));
-            tabs.SelectedIndexChanged += (s, e) => { if (tabs.SelectedIndex == 3) RefreshGrid(); };
-            root.Controls.Add(tabs, 0, 1);
+            _ports = v.cboPorts;
+            _linkStatus = v.lblLinkStatus;
+            _btnConnect = v.btnConnect;
+            _console = v.txtConsole;
+            On(v.btnRescanPorts, () => RefreshPorts(false));
+            On(v.btnAutoDetect, AutoDetectMega);
+            On(v.btnConnect, ToggleConnect);
+            v.tabMain.SelectedIndexChanged += (s, e) => { if (v.tabMain.SelectedTab == v.tabHardwareHistory) RefreshGrid(); };
 
-            _console = new TextBox
-            {
-                Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
-                Font = new Font("Consolas", 9f), BackColor = Color.FromArgb(24, 26, 31), ForeColor = Color.Gainsboro
-            };
-            root.Controls.Add(_console, 0, 2);
-
-            _root = root;
-            return root;
+            WireWiringTab(v);
+            WireJigTab(v);
+            WireDeviceTab(v);
+            WireHistoryTab(v);
+            return v;
         }
 
-        private static TabPage Page(string title, Control c) { var p = new TabPage(title) { Padding = new Padding(4) }; c.Dock = DockStyle.Fill; p.Controls.Add(c); return p; }
-
-        private Control BuildTopBar()
+        /// <summary>Runs a button action, logging instead of crashing on failure.</summary>
+        private void On(Button b, Action a)
         {
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-            _ports = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330 };
-            _btnConnect = Btn("Connect", ToggleConnect);
-            _linkStatus = new Label { AutoSize = true, Margin = new Padding(8, 7, 0, 0), Text = "Not connected" };
-            bar.Controls.AddRange(new Control[]
-            {
-                new Label { Text = "Jig port:", AutoSize = true, Margin = new Padding(0, 7, 4, 0) }, _ports,
-                Btn("Rescan ports", () => RefreshPorts(false)), Btn("Auto-detect Mega", AutoDetectMega), _btnConnect,
-                new Label { Text = "115200 8N1", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(8, 7, 0, 0) }, _linkStatus
-            });
-            return bar;
-        }
-
-        private Button Btn(string text, Action a)
-        {
-            var b = new Button { Text = text, AutoSize = true, Margin = new Padding(3), Padding = new Padding(4, 2, 4, 2) };
             b.Click += (s, e) => { try { a(); } catch (Exception ex) { Log("[error] " + ex.Message); } };
+        }
+
+        /// <summary>
+        /// Runtime buttons (one per boot mode) copy the look of a designer button,
+        /// so restyling that button in Design View restyles them too.
+        /// </summary>
+        private static Button CloneButton(Button like, string text)
+        {
+            var b = new Button
+            {
+                Text = text, AutoSize = like.AutoSize, Margin = like.Margin, Padding = like.Padding, Font = like.Font,
+                FlatStyle = like.FlatStyle, BackColor = like.BackColor, ForeColor = like.ForeColor,
+                UseVisualStyleBackColor = like.UseVisualStyleBackColor
+            };
+            b.FlatAppearance.BorderColor = like.FlatAppearance.BorderColor;
+            b.FlatAppearance.BorderSize = like.FlatAppearance.BorderSize;
+            b.FlatAppearance.MouseOverBackColor = like.FlatAppearance.MouseOverBackColor;
             return b;
+        }
+
+        private static IEnumerable<Button> ButtonsIn(Control root)
+        {
+            foreach (Control c in root.Controls)
+            {
+                if (c is Button b) yield return b;
+                foreach (var inner in ButtonsIn(c)) yield return inner;
+            }
         }
 
         // ───────────────────────────── logging / threading ─────────────────────────────
@@ -294,26 +301,24 @@ namespace TestPointTrigger.Modules
 
         // ───────────────────────────── Wiring tab ─────────────────────────────
 
-        private Control BuildWiringTab()
+        private void WireWiringTab(PhoneJigView v)
         {
-            var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterDistance = 700 };
+            _diagram = v.pnlDiagram;
+            _stepList = v.lvSteps;
+            _stepText = v.txtStepText;
+            _btnRun = v.btnRunCheck;
+            _btnDrive = v.btnDrive;
+            _btnOk = v.btnMarkOk;
+            _btnFail = v.btnMarkFailed;
 
-            _diagram = new WiringPanel { Dock = DockStyle.Fill };
             _diagram.SetSteps(_steps);
             _diagram.NodeClicked += id =>
             {
                 var s = _steps.FirstOrDefault(x => (x.Nodes ?? "").Split(',').Contains(id));
                 if (s != null) foreach (ListViewItem it in _stepList.Items) if (it.Tag == s) { it.Selected = true; it.EnsureVisible(); }
             };
-            split.Panel1.Controls.Add(_diagram);
 
-            var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-            right.RowStyles.Add(new RowStyle(SizeType.Percent, 42f));
-            right.RowStyles.Add(new RowStyle(SizeType.Percent, 58f));
-            right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-            _stepList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false };
-            _stepList.Columns.Add("", 26); _stepList.Columns.Add("Step", 300); _stepList.Columns.Add("Test", 52);
+            // Steps are data (WiringGuide), so the rows are added here; columns are in the designer.
             var groups = new Dictionary<string, ListViewGroup>();
             foreach (var s in _steps)
             {
@@ -323,27 +328,17 @@ namespace TestPointTrigger.Modules
                 _stepList.Items.Add(it);
             }
             _stepList.SelectedIndexChanged += (s, e) => ShowStep();
-            right.Controls.Add(_stepList, 0, 0);
 
-            _stepText = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Segoe UI", 9f) };
-            right.Controls.Add(_stepText, 0, 1);
-
-            var btns = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-            _btnRun = Btn("Run check", () => RunSelected());
-            _btnDrive = Btn("Drive (set outputs)", DriveSelected);
-            _btnOk = Btn("Mark OK", () => SetSelected(StepState.Pass, "Confirmed by operator."));
-            _btnFail = Btn("Mark failed", () => SetSelected(StepState.Fail, "Marked failed by operator."));
-            btns.Controls.AddRange(new Control[]
-            {
-                _btnRun, _btnDrive, _btnOk, _btnFail,
-                Btn("Run all (guided)", RunAllGuided), Btn("Reset", ResetSteps), Btn("Save report", SaveReport)
-            });
-            right.Controls.Add(btns, 0, 2);
-            split.Panel2.Controls.Add(right);
+            On(_btnRun, () => RunSelected());
+            On(_btnDrive, DriveSelected);
+            On(_btnOk, () => SetSelected(StepState.Pass, "Confirmed by operator."));
+            On(_btnFail, () => SetSelected(StepState.Fail, "Marked failed by operator."));
+            On(v.btnRunAll, RunAllGuided);
+            On(v.btnResetSteps, ResetSteps);
+            On(v.btnSaveReport, SaveReport);
 
             if (_stepList.Items.Count > 0) _stepList.Items[0].Selected = true;
             RefreshSteps();
-            return split;
         }
 
         private WiringStep SelectedStep => _stepList.SelectedItems.Count > 0 ? _stepList.SelectedItems[0].Tag as WiringStep : null;
@@ -467,136 +462,60 @@ namespace TestPointTrigger.Modules
 
         // ───────────────────────────── Jig tab ─────────────────────────────
 
-        private Control BuildJigTab()
+        private void WireJigTab(PhoneJigView v)
         {
-            var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+            // Designer buttons whose Tag holds a jig command simply send it.
+            foreach (var b in ButtonsIn(v.flpJig).ToList())
+                if (b.Tag is string c && c.Length > 0) { var cc = c; On(b, () => Cmd(cc)); }
 
-            FlowLayoutPanel Row(string title)
-            {
-                var gb = new GroupBox { Text = title, AutoSize = true, Padding = new Padding(6), Width = 900 };
-                var f = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-                gb.Controls.Add(f); flow.Controls.Add(gb);
-                return f;
-            }
-
-            var modes = Row("Boot modes (hover for keys)");
-            var tip = new ToolTip();
+            // Boot modes come from JigModes, one button each, placed before "OFF (all safe)".
+            _tips = new ToolTip();
+            int i = 0;
             foreach (var m in JigModes.All)
             {
-                var b = Btn(m.Name, () => Cmd(m.Name));
-                tip.SetToolTip(b, m.Keys + " | USB " + m.Usb + " | " + m.Note);
-                modes.Controls.Add(b);
-            }
-            modes.Controls.Add(Btn("OFF (all safe)", () => Cmd("off")));
-
-            var chk = Row("Wiring checks");
-            foreach (var c in new[] { "ident", "pins", "sense", "selftest", "status", "help" }) { var cc = c; chk.Controls.Add(Btn(cc, () => Cmd(cc))); }
-
-            var pw = Row("Power and USB");
-            foreach (var c in new[] { "usb pc", "usb shield", "usb off", "vcc on", "vcc off", "btemp on", "btemp off" }) { var cc = c; pw.Controls.Add(Btn(cc, () => Cmd(cc))); }
-
-            var keys = Row("Manual pad lines (open-drain)");
-            foreach (var k in new[] { "tp", "up", "dn", "pwr" })
-            {
-                var kk = k;
-                keys.Controls.Add(Btn(kk + " hold", () => Cmd("key " + kk + " hold")));
-                keys.Controls.Add(Btn(kk + " rel", () => Cmd("key " + kk + " rel")));
+                var mm = m;
+                var b = CloneButton(v.btnModeOff, m.Name);
+                On(b, () => Cmd(mm.Name));
+                _tips.SetToolTip(b, m.Keys + " | USB " + m.Usb + " | " + m.Note);
+                v.flpBootModes.Controls.Add(b);
+                v.flpBootModes.Controls.SetChildIndex(b, i++);
             }
 
-            var ua = Row("Phone UART (Serial1)");
-            var tb = new TextBox { Width = 220 };
-            var trig = new TextBox { Width = 200 };
-            ua.Controls.AddRange(new Control[]
-            {
-                Btn("uart on", () => Cmd("uart on")), Btn("uart off", () => Cmd("uart off")), Btn("baud 115200", () => Cmd("uart baud 115200")),
-                Btn("loop test", () => Cmd("uart loop")), Btn("listen 3 s", () => Cmd("uart listen 3000")),
-                tb, Btn("send", () => { if (tb.Text.Length > 0) Cmd("uart send " + tb.Text); }),
-                new Label { Text = "release lines on:", AutoSize = true, Margin = new Padding(12, 7, 2, 0) }, trig,
-                Btn("set trigger", () => { if (trig.Text.Length > 0) Cmd("trigger " + trig.Text); }), Btn("clear", () => Cmd("trigger off"))
-            });
+            On(v.btnUartSend, () => { if (v.txtUartSend.Text.Length > 0) Cmd("uart send " + v.txtUartSend.Text); });
+            On(v.btnSetTrigger, () => { if (v.txtTrigger.Text.Length > 0) Cmd("trigger " + v.txtTrigger.Text); });
+            On(v.btnAdbViaShield, () => Cmd("adb " + v.txtAdbCmd.Text));
 
-            var adb = Row("ADB through the host shield");
-            var at = new TextBox { Width = 260, Text = "getprop ro.product.model" };
-            adb.Controls.AddRange(new Control[] { at, Btn("adb (via shield)", () => Cmd("adb " + at.Text)) });
-            adb.Controls.Add(new Label { Text = "runs 'normal' first so the phone boots and the USB path goes to the shield", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(8, 7, 0, 0) });
+            v.cboTuneMode.Items.AddRange(JigModes.All.Select(m => (object)m.Name).ToArray());
+            if (v.cboTuneMode.Items.Count > 0) v.cboTuneMode.SelectedIndex = 0;
+            On(v.btnTuneApply, () => Cmd("tune " + v.cboTuneMode.Text + " " + v.txtMask.Text + " " + v.txtUsbDelay.Text + " " + v.txtHold.Text));
 
-            var tune = Row("Tune a mode (RAM only)");
-            var mode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
-            mode.Items.AddRange(JigModes.All.Select(m => (object)m.Name).ToArray()); mode.SelectedIndex = 0;
-            var mask = new TextBox { Width = 50, Text = "0x01" }; var ud = new TextBox { Width = 60, Text = "400" }; var hm = new TextBox { Width = 60, Text = "2500" };
-            tune.Controls.AddRange(new Control[]
-            {
-                mode, new Label { Text = "mask", AutoSize = true, Margin = new Padding(6, 7, 0, 0) }, mask,
-                new Label { Text = "usb delay ms", AutoSize = true, Margin = new Padding(6, 7, 0, 0) }, ud,
-                new Label { Text = "hold ms", AutoSize = true, Margin = new Padding(6, 7, 0, 0) }, hm,
-                Btn("apply", () => Cmd("tune " + mode.Text + " " + mask.Text + " " + ud.Text + " " + hm.Text))
-            });
-
-            var raw = Row("Any command");
-            var rt = new TextBox { Width = 380 };
+            var rt = v.txtRawCmd;
             rt.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter && rt.Text.Length > 0) { Cmd(rt.Text); rt.Clear(); e.SuppressKeyPress = true; } };
-            raw.Controls.AddRange(new Control[] { rt, Btn("send", () => { if (rt.Text.Length > 0) { Cmd(rt.Text); rt.Clear(); } }) });
-
-            return flow;
+            On(v.btnRawSend, () => { if (rt.Text.Length > 0) { Cmd(rt.Text); rt.Clear(); } });
         }
 
         // ───────────────────────────── Device tab (autonomous profiling) ─────────────────────────────
 
-        private Control BuildDeviceTab()
+        private void WireDeviceTab(PhoneJigView v)
         {
-            var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-            t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            t.RowStyles.Add(new RowStyle(SizeType.Percent, 62f));
-            t.RowStyles.Add(new RowStyle(SizeType.Percent, 38f));
+            _auto = v.chkAutoProfile;
+            _attached = v.cboAttached;
+            _identity = v.lvIdentity;
+            _modeList = v.lvModes;
+            _procedure = v.txtProcedure;
+            _notes = v.txtNotes;
+            _pic = v.picDevice;
+            _picInfo = v.lblPicInfo;
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-            _auto = new CheckBox { Text = "Auto-profile on connect", Checked = true, AutoSize = true, Margin = new Padding(3, 7, 10, 0) };
-            _attached = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
-            bar.Controls.AddRange(new Control[]
-            {
-                _auto, new Label { Text = "Attached:", AutoSize = true, Margin = new Padding(0, 7, 3, 0) }, _attached,
-                Btn("Detect now", () => ProbeSelected(false)), Btn("Rescan (force)", () => ProbeSelected(true)),
-                Btn("Find model image", FindImageSelected), Btn("Set image...", SetImage), Btn("Forget device", ForgetCurrent)
-            });
-            t.Controls.Add(bar, 0, 0);
-
-            var cols = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-            cols.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46f));
-            cols.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28f));
-            cols.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26f));
-
-            _identity = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, GridLines = true };
-            _identity.Columns.Add("Property", 150); _identity.Columns.Add("Value", 330);
-            cols.Controls.Add(_identity, 0, 0);
-
-            var mid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-            mid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); mid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            _modeList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false };
-            _modeList.Columns.Add("Mode", 80); _modeList.Columns.Add("Keys", 110); _modeList.Columns.Add("Software", 120);
+            On(v.btnDetectNow, () => ProbeSelected(false));
+            On(v.btnRescanForce, () => ProbeSelected(true));
+            On(v.btnFindImage, FindImageSelected);
+            On(v.btnSetImage, SetImage);
+            On(v.btnForgetDevice, ForgetCurrent);
+            On(v.btnRunOnJig, RunModeOnJig);
+            On(v.btnRunViaAdb, RunModeViaAdb);
             _modeList.DoubleClick += (s, e) => RunModeOnJig();
-            mid.Controls.Add(_modeList, 0, 0);
-            var mb = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
-            mb.Controls.Add(Btn("Run on jig", RunModeOnJig));
-            mb.Controls.Add(Btn("Run via adb", RunModeViaAdb));
-            mid.Controls.Add(mb, 0, 1);
-            cols.Controls.Add(mid, 1, 0);
-
-            var imgBox = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-            imgBox.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); imgBox.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            _pic = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BorderStyle = BorderStyle.FixedSingle, BackColor = Color.White };
-            _picInfo = new Label { AutoSize = true, MaximumSize = new Size(260, 0), ForeColor = Color.DimGray, Text = "No image yet" };
-            imgBox.Controls.Add(_pic, 0, 0); imgBox.Controls.Add(_picInfo, 0, 1);
-            cols.Controls.Add(imgBox, 2, 0);
-            t.Controls.Add(cols, 0, 1);
-
-            var lower = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-            lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70f)); lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
-            _procedure = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9f) };
-            _notes = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical };
             _notes.Leave += (s, e) => { if (_current != null && _current.Notes != _notes.Text) { _current.Notes = _notes.Text; _store.Upsert(_current); } };
-            lower.Controls.Add(_procedure, 0, 0); lower.Controls.Add(_notes, 1, 0);
-            t.Controls.Add(lower, 0, 2);
-            return t;
         }
 
         private static string Resolve(string exe)
@@ -793,36 +712,24 @@ namespace TestPointTrigger.Modules
             Task.Run(() => Log(CliRunner.Capture(DeviceProbe.Adb, "-s " + serial + " " + sw.Substring(4), 10000)));
         }
 
-        // ───────────────────────────── Devices tab (database + workbook) ─────────────────────────────
+        // ───────────────────────────── Hardware History tab (database + workbook) ─────────────────────────────
 
-        private Control BuildDevicesTab()
+        private void WireHistoryTab(PhoneJigView v)
         {
-            var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-            t.RowStyles.Add(new RowStyle(SizeType.AutoSize)); t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-            bar.Controls.AddRange(new Control[]
-            {
-                Btn("Refresh", RefreshGrid), Btn("Export workbook (.xlsx)", () => ExportWorkbook(false)),
-                Btn("Export + open Google Drive", () => ExportWorkbook(true)), Btn("Find images for all", FindAllImages),
-                Btn("Export JSON", ExportJson), Btn("Open data folder", () => { try { Process.Start("explorer.exe", AppLog.Dir); } catch { } })
-            });
-            t.Controls.Add(bar, 0, 0);
-            _grid = new DataGridView
-            {
-                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
-            };
-            foreach (var c in new[] { "Device", "Serial", "Chip family", "Modes", "Android", "Image", "Last seen" }) _grid.Columns.Add(c, c);
+            _grid = v.grdHistory;
+            _gridInfo = v.lblHistoryInfo;
+            On(v.btnRefreshHistory, RefreshGrid);
+            On(v.btnExportWorkbook, () => ExportWorkbook(false));
+            On(v.btnExportDrive, () => ExportWorkbook(true));
+            On(v.btnFindAllImages, FindAllImages);
+            On(v.btnExportJson, ExportJson);
+            On(v.btnOpenDataFolder, () => { try { Process.Start("explorer.exe", AppLog.Dir); } catch { } });
             _grid.CellDoubleClick += (s, e) =>
             {
                 if (e.RowIndex < 0) return;
                 var d = _store.Get(Convert.ToString(_grid.Rows[e.RowIndex].Cells[1].Value));
                 if (d != null) { ShowProfile(d); Log("Showing " + d.DisplayName + " on the Device tab."); }
             };
-            t.Controls.Add(_grid, 0, 1);
-            _gridInfo = new Label { AutoSize = true, ForeColor = Color.DimGray };
-            t.Controls.Add(_gridInfo, 0, 2);
-            return t;
         }
 
         private void RefreshGrid()
@@ -917,7 +824,7 @@ namespace TestPointTrigger.Modules
 
         public void Dispose()
         {
-            try { _hotplug?.Dispose(); _poll?.Dispose(); } catch { }
+            try { _hotplug?.Dispose(); _poll?.Dispose(); _tips?.Dispose(); } catch { }
             _link.Line -= OnJigLine;
             _link.Dispose();
         }

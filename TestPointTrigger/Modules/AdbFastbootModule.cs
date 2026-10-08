@@ -1,4 +1,4 @@
-// TestPoint Trigger - ADB / Fastboot / Download / Recovery console
+﻿// TestPoint Trigger - ADB / Fastboot / Download / Recovery console
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
 using System;
 using System.Collections.Generic;
@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using Newtonsoft.Json;
+using TestPointTrigger.Modules.Views;
 
 namespace TestPointTrigger.Modules
 {
@@ -46,154 +47,88 @@ namespace TestPointTrigger.Modules
             LoadSettings();
             ResolveTools();
 
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(8) };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));            // tool/device bar
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 42f));       // tabs of buttons
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 58f));       // console
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));            // command bar
+            // Layout and styling live in AdbFastbootView.Designer.cs (open it in Design View).
+            var v = new AdbFastbootView();
+            _toolStatus = v.lblToolStatus;
+            _devices = v.cboDevices;
+            _console = v.txtConsole;
+            _command = v.txtCommand;
+            _stop = v.btnStop;
 
-            // --- tool + device bar ---
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-            _toolStatus = new Label { AutoSize = true, Margin = new Padding(0, 6, 12, 0) };
-            _devices = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
-            bar.Controls.AddRange(new Control[]
-            {
-                _toolStatus,
-                Btn("Set platform-tools…", SetToolsFolder),
-                Btn("Refresh devices", RefreshDevices),
-                new Label { Text = "Device:", AutoSize = true, Margin = new Padding(8, 6, 4, 0) }, _devices,
-                Btn("adb devices", () => Query(_adb, "devices -l")),
-                Btn("fastboot devices", () => Query(_fastboot, "devices"))
-            });
+            On(v.btnSetTools, SetToolsFolder);
+            On(v.btnRefreshDevices, RefreshDevices);
+            On(v.btnAdbDevices, () => Query(_adb, "devices -l"));
+            On(v.btnFastbootDevices, () => Query(_fastboot, "devices"));
 
-            // --- button tabs ---
-            var tabs = new TabControl { Dock = DockStyle.Fill };
-            tabs.TabPages.Add(AdbTab());
-            tabs.TabPages.Add(FastbootTab());
-            tabs.TabPages.Add(DownloadTab());
+            // ADB tab
+            On(v.btnAdbReboot, () => Adb("reboot"));
+            On(v.btnAdbRecovery, () => Adb("reboot recovery"));
+            On(v.btnAdbBootloader, () => Adb("reboot bootloader"));
+            On(v.btnAdbDownload, () => Adb("reboot download"));
+            On(v.btnAdbEdl, () => Adb("reboot edl"));
+            On(v.btnAdbInstall, InstallApk);
+            On(v.btnAdbUninstall, () => { var pkg = Ask("Package name to uninstall:", "Uninstall"); if (pkg != null) Adb("uninstall " + pkg.Trim()); });
+            On(v.btnAdbPush, Push);
+            On(v.btnAdbPull, Pull);
+            On(v.btnAdbSideload, Sideload);
+            On(v.btnAdbLogcat, () => Adb("logcat"));
+            On(v.btnAdbScreencap, Screencap);
+            On(v.btnAdbShell, () => Adb("shell"));
+            On(v.btnAdbGetprop, () => Adb("shell getprop"));
+            On(v.btnAdbPackages, () => Adb("shell pm list packages"));
+            On(v.btnAdbBattery, () => Adb("shell dumpsys battery"));
+            On(v.btnAdbScreenSize, () => Adb("shell wm size"));
+            On(v.btnAdbTcpip, () => Adb("tcpip 5555"));
+            On(v.btnAdbConnect, () => { var ip = Ask("Device IP[:port] to connect:", "adb connect"); if (ip != null) Adb("connect " + ip.Trim()); });
+            On(v.btnAdbBackup, Backup);
+            On(v.btnAdbRestore, Restore);
+            On(v.btnAdbKillServer, () => Query(_adb, "kill-server"));
+            On(v.btnAdbStartServer, () => Query(_adb, "start-server"));
 
-            // --- console ---
-            _console = new TextBox
-            {
-                Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both,
-                WordWrap = false, BackColor = Color.FromArgb(24, 24, 28), ForeColor = Color.Gainsboro,
-                Font = new Font("Consolas", 9.5f)
-            };
+            // Fastboot tab
+            On(v.btnFbGetvar, () => Fastboot("getvar all"));
+            On(v.btnFbUnlock, () => { if (Confirm("Unlock the bootloader?\nThis WIPES the device.")) Fastboot("flashing unlock"); });
+            On(v.btnFbOemUnlock, () => { if (Confirm("oem unlock?\nThis WIPES the device.")) Fastboot("oem unlock"); });
+            On(v.btnFbLock, () => { if (Confirm("Re-lock the bootloader?")) Fastboot("flashing lock"); });
+            On(v.btnFbReboot, () => Fastboot("reboot"));
+            On(v.btnFbBootloader, () => Fastboot("reboot bootloader"));
+            On(v.btnFbRecovery, () => Fastboot("reboot recovery"));
+            On(v.btnFbFastbootd, () => Fastboot("reboot fastboot"));
+            On(v.btnFbBootImg, () => FlashOrBoot("boot", false));
+            On(v.btnFbFlashPartition, () => FlashOrBoot(null, true));
+            On(v.btnFbFlashBoot, () => FlashKnown("boot"));
+            On(v.btnFbFlashRecovery, () => FlashKnown("recovery"));
+            On(v.btnFbErase, () => { var part = Ask("Partition to ERASE:", "fastboot erase"); if (part != null && Confirm("Erase '" + part + "'?")) Fastboot("erase " + part.Trim()); });
+            On(v.btnFbFormat, () => { var part = Ask("Partition to FORMAT:", "fastboot format"); if (part != null && Confirm("Format '" + part + "'?")) Fastboot("format " + part.Trim()); });
+            On(v.btnFbActiveA, () => Fastboot("--set-active=a"));
+            On(v.btnFbActiveB, () => Fastboot("--set-active=b"));
+            On(v.btnFbWipe, () => { if (Confirm("fastboot -w wipes userdata + cache. Continue?")) Fastboot("-w"); });
+            On(v.btnFbContinue, () => Fastboot("continue"));
 
-            // --- command bar ---
-            var cmdBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, AutoSize = true };
-            cmdBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            for (int i = 0; i < 3; i++) cmdBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            _command = new TextBox { Dock = DockStyle.Fill, Font = new Font("Consolas", 9.5f) };
+            // Download / Recovery tab
+            On(v.btnDlSamsung, () => Adb("reboot download"));
+            On(v.btnDlEdlAdb, () => Adb("reboot edl"));
+            On(v.btnDlEdlFastboot, () => Fastboot("oem edl"));
+            On(v.btnHeimdallDetect, () => Heimdall("detect"));
+            On(v.btnHeimdallPit, () => Heimdall("print-pit"));
+            On(v.btnHeimdallFlash, HeimdallFlash);
+            On(v.btnRecReboot, () => Adb("reboot recovery"));
+            On(v.btnRecSideload, Sideload);
+
+            // Command bar
             _command.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; RunCommand(); } };
-            var run = Btn("Run / Send", RunCommand);
-            _stop = Btn("Stop", () => _runner.Stop());
-            var clear = Btn("Clear", () => _console.Clear());
-            cmdBar.Controls.Add(_command, 0, 0);
-            cmdBar.Controls.Add(run, 1, 0);
-            cmdBar.Controls.Add(_stop, 2, 0);
-            cmdBar.Controls.Add(clear, 3, 0);
-
-            root.Controls.Add(bar, 0, 0);
-            root.Controls.Add(tabs, 0, 1);
-            root.Controls.Add(_console, 0, 2);
-            root.Controls.Add(cmdBar, 0, 3);
+            On(v.btnRun, RunCommand);
+            On(_stop, () => _runner.Stop());
+            On(v.btnClear, () => _console.Clear());
 
             _runner.Output += Append;
             _runner.Exited += code => Append("[exit " + code + "]");
 
             UpdateToolStatus();
-            return root;
+            return v;
         }
 
-        private TabPage AdbTab()
-        {
-            var p = FlowPage("ADB");
-            p.Controls.AddRange(new Control[]
-            {
-                Btn("Reboot", () => Adb("reboot")),
-                Btn("→ Recovery", () => Adb("reboot recovery")),
-                Btn("→ Bootloader", () => Adb("reboot bootloader")),
-                Btn("→ Download", () => Adb("reboot download")),
-                Btn("→ EDL (9008)", () => Adb("reboot edl")),
-                Btn("Install APK…", InstallApk),
-                Btn("Uninstall pkg…", () => { var pkg = Ask("Package name to uninstall:", "Uninstall"); if (pkg != null) Adb("uninstall " + pkg.Trim()); }),
-                Btn("Push file…", Push),
-                Btn("Pull file…", Pull),
-                Btn("Sideload OTA…", Sideload),
-                Btn("Logcat", () => Adb("logcat")),
-                Btn("Screencap…", Screencap),
-                Btn("Interactive shell", () => Adb("shell")),
-                Btn("getprop", () => Adb("shell getprop")),
-                Btn("List packages", () => Adb("shell pm list packages")),
-                Btn("Battery", () => Adb("shell dumpsys battery")),
-                Btn("Screen size", () => Adb("shell wm size")),
-                Btn("Wi-Fi: tcpip 5555", () => Adb("tcpip 5555")),
-                Btn("Wi-Fi: connect…", () => { var ip = Ask("Device IP[:port] to connect:", "adb connect"); if (ip != null) Adb("connect " + ip.Trim()); }),
-                Btn("Backup…", Backup),
-                Btn("Restore…", Restore),
-                Btn("Kill server", () => Query(_adb, "kill-server")),
-                Btn("Start server", () => Query(_adb, "start-server"))
-            });
-            return Wrap(p);
-        }
-
-        private TabPage FastbootTab()
-        {
-            var p = FlowPage("Fastboot");
-            p.Controls.AddRange(new Control[]
-            {
-                Btn("getvar all", () => Fastboot("getvar all")),
-                Btn("Unlock", () => { if (Confirm("Unlock the bootloader?\nThis WIPES the device.")) Fastboot("flashing unlock"); }),
-                Btn("OEM unlock", () => { if (Confirm("oem unlock?\nThis WIPES the device.")) Fastboot("oem unlock"); }),
-                Btn("Lock", () => { if (Confirm("Re-lock the bootloader?")) Fastboot("flashing lock"); }),
-                Btn("Reboot", () => Fastboot("reboot")),
-                Btn("→ Bootloader", () => Fastboot("reboot bootloader")),
-                Btn("→ Recovery", () => Fastboot("reboot recovery")),
-                Btn("→ fastbootd", () => Fastboot("reboot fastboot")),
-                Btn("Boot img (temp)…", () => FlashOrBoot("boot", false)),
-                Btn("Flash partition…", () => FlashOrBoot(null, true)),
-                Btn("Flash boot…", () => FlashKnown("boot")),
-                Btn("Flash recovery…", () => FlashKnown("recovery")),
-                Btn("Erase partition…", () => { var part = Ask("Partition to ERASE:", "fastboot erase"); if (part != null && Confirm("Erase '" + part + "'?")) Fastboot("erase " + part.Trim()); }),
-                Btn("Format partition…", () => { var part = Ask("Partition to FORMAT:", "fastboot format"); if (part != null && Confirm("Format '" + part + "'?")) Fastboot("format " + part.Trim()); }),
-                Btn("Set active a", () => Fastboot("--set-active=a")),
-                Btn("Set active b", () => Fastboot("--set-active=b")),
-                Btn("Wipe (-w)", () => { if (Confirm("fastboot -w wipes userdata + cache. Continue?")) Fastboot("-w"); }),
-                Btn("Continue", () => Fastboot("continue"))
-            });
-            return Wrap(p);
-        }
-
-        private TabPage DownloadTab()
-        {
-            var p = FlowPage("Download / Recovery");
-            p.Controls.AddRange(new Control[]
-            {
-                Btn("Enter Download (Samsung)", () => Adb("reboot download")),
-                Btn("Enter EDL (adb)", () => Adb("reboot edl")),
-                Btn("Enter EDL (fastboot)", () => Fastboot("oem edl")),
-                Btn("Heimdall: detect", () => Heimdall("detect")),
-                Btn("Heimdall: print-pit", () => Heimdall("print-pit")),
-                Btn("Heimdall: flash partition…", HeimdallFlash),
-                Btn("Recovery: reboot", () => Adb("reboot recovery")),
-                Btn("Recovery: sideload OTA…", Sideload),
-                new Label {
-                    Text = "Samsung Odin and Qualcomm QFIL/EDL flashing are vendor GUIs.\r\n" +
-                           "Use these to ENTER the mode; use Heimdall (open Odin) or QFIL to flash.",
-                    AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(4, 10, 4, 4)
-                }
-            });
-            return Wrap(p);
-        }
-
-        private TabPage Wrap(FlowLayoutPanel p)
-        {
-            var t = new TabPage((string)p.Tag);
-            p.Dock = DockStyle.Fill;
-            t.Controls.Add(p);
-            return t;
-        }
+        private static void On(Button b, Action a) => b.Click += (s, e) => a();
 
         // ─────────────────────────────── Actions ───────────────────────────────
 
@@ -466,20 +401,6 @@ namespace TestPointTrigger.Modules
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
         private static string Q(string path) => "\"" + path + "\"";
         private static string Quote(string s) => s.Contains(" ") ? "\"" + s + "\"" : s;
-
-        private FlowLayoutPanel FlowPage(string title)
-        {
-            var p = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true, Padding = new Padding(4) };
-            p.Tag = title;
-            return p;
-        }
-
-        private Button Btn(string text, Action a)
-        {
-            var b = new Button { Text = text, AutoSize = true, Margin = new Padding(3), Padding = new Padding(4, 2, 4, 2) };
-            b.Click += (s, e) => a();
-            return b;
-        }
 
         private void Append(string line)
         {
