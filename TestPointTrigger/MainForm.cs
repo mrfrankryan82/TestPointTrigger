@@ -23,14 +23,15 @@ namespace TestPointTrigger
         public const string BuildDate = AppInfo.ReleaseDate;
         public static readonly string Credit = $"Developer: HaKDMoDz™ · v{AppVersion} · {BuildDate}";
 
-        enum Mode { Pan, Edit, Crop }
+        enum Mode { Pan, Edit, Crop, Box }
 
         // state
         Mat _mat; Bitmap _bmp; string _path;
         List<Pad> _detected = new List<Pad>(), _manual = new List<Pad>(), _pads = new List<Pad>();
+        List<Pad> _boxDetected = new List<Pad>();
         readonly List<PointF> _suppressed = new List<PointF>();
         readonly Stack<(List<Pad> m, List<PointF> s)> _undo = new Stack<(List<Pad>, List<PointF>)>();
-        Rectangle? _crop; Rectangle? _cropDrag; Point _dragStart; bool _panning; PointF _panOrigin;
+        Rectangle? _crop; Rectangle? _cropDrag; Rectangle? _boxDrag; Point _dragStart; bool _panning; PointF _panOrigin;
         float _zoom = 1f; PointF _off; Mode _mode = Mode.Edit; int _sel = -1;
         readonly DetectorSettings _ds = new DetectorSettings();
         readonly RenderOptions _ro = new RenderOptions();
@@ -40,7 +41,7 @@ namespace TestPointTrigger
         readonly CanvasPanel _canvas = new CanvasPanel();
         readonly ToolStripStatusLabel _status = new ToolStripStatusLabel { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
         readonly ListView _list = new ListView { View = View.Details, FullRowSelect = true, HideSelection = false, Dock = DockStyle.Fill };
-        readonly ToolStripButton _bPan = new ToolStripButton("✋ Pan"), _bEdit = new ToolStripButton("✚ Edit pads"), _bCrop = new ToolStripButton("⬚ Crop to board");
+        readonly ToolStripButton _bPan = new ToolStripButton("✋ Pan"), _bEdit = new ToolStripButton("✚ Edit pads"), _bCrop = new ToolStripButton("⬚ Crop to board"), _bBox = new ToolStripButton("▧ Box detect");
         readonly ToolStripComboBox _style = new ToolStripComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
         readonly NumericUpDown _labelSize = new NumericUpDown { Minimum = 4, Maximum = 60, DecimalPlaces = 1, Increment = 0.5M, Value = 11 };
         readonly NumericUpDown _upscale = new NumericUpDown { Minimum = 1, Maximum = 6, DecimalPlaces = 1, Increment = 0.5M, Value = 3 };
@@ -76,6 +77,7 @@ namespace TestPointTrigger
             edit.DropDownItems.Add(Mi("&Undo", () => Undo(), Keys.Control | Keys.Z));
             edit.DropDownItems.Add("Clear &manual edits", null, (s, e) => { PushUndo(); _manual.Clear(); _suppressed.Clear(); Rebuild(); });
             edit.DropDownItems.Add("Clear c&rop", null, (s, e) => { _crop = null; RunDetect(); });
+            edit.DropDownItems.Add("Clear &box detections", null, (s, e) => { _boxDetected.Clear(); Rebuild(); SetStatus("Cleared box detections."); });
             var help = new ToolStripMenuItem("&Help");
             help.DropDownItems.Add("&How to use", null, (s, e) => ShowHelp());
             help.DropDownItems.Add("&About", null, (s, e) => MessageBox.Show(this,
@@ -87,8 +89,8 @@ namespace TestPointTrigger
             tools.Items.Add(new ToolStripButton("📂 Open", null, (s, e) => OpenImage()));
             tools.Items.Add(new ToolStripButton("🔍 Detect", null, (s, e) => RunDetect()));
             tools.Items.Add(new ToolStripSeparator());
-            _bPan.Click += (s, e) => SetMode(Mode.Pan); _bEdit.Click += (s, e) => SetMode(Mode.Edit); _bCrop.Click += (s, e) => SetMode(Mode.Crop);
-            tools.Items.AddRange(new ToolStripItem[] { _bPan, _bEdit, _bCrop, new ToolStripSeparator() });
+            _bPan.Click += (s, e) => SetMode(Mode.Pan); _bEdit.Click += (s, e) => SetMode(Mode.Edit); _bCrop.Click += (s, e) => SetMode(Mode.Crop); _bBox.Click += (s, e) => SetMode(Mode.Box);
+            tools.Items.AddRange(new ToolStripItem[] { _bPan, _bEdit, _bCrop, _bBox, new ToolStripSeparator() });
             tools.Items.Add(new ToolStripLabel("Style:"));
             _style.Items.AddRange(new object[] { "Labels only", "Circles + labels" }); _style.SelectedIndex = 0;
             _style.SelectedIndexChanged += (s, e) => { _ro.Style = _style.SelectedIndex == 0 ? MarkStyle.LabelsOnly : MarkStyle.CirclesAndLabels; _canvas.Invalidate(); };
@@ -107,12 +109,9 @@ namespace TestPointTrigger
             var side = new Panel { Dock = DockStyle.Right, Width = 300, Padding = new Padding(8) };
             var tbl = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1 };
             AddHeader(tbl, "Detection");
-            AddSlider(tbl, "Min pad size", 3, 200, 8, v => _ds.MinAreaFrac = v * 1e-6, v => $"{v * 1e-6:0.0e0}");
-            AddSlider(tbl, "Max pad size", 100, 8000, 2800, v => _ds.MaxAreaFrac = v * 1e-6, v => $"{v * 1e-6:0.0e0}");
-            AddSlider(tbl, "Roundness (circularity)", 30, 95, 55, v => _ds.CircMin = v / 100.0, v => (v / 100.0).ToString("0.00"));
-            AddSlider(tbl, "Shield-metal rejection", 20, 100, 55, v => _ds.IsoMax = v / 100.0, v => (v / 100.0).ToString("0.00"));
-            AddSlider(tbl, "Bezel-text rejection", 0, 120, 50, v => _ds.DarkSurroundV = v, v => v.ToString());
-            AddSlider(tbl, "Screw-hole rejection", 30, 95, 68, v => _ds.DonutRatio = v / 100.0, v => (v / 100.0).ToString("0.00"));
+            AddSlider(tbl, "Min pad radius (px)", 2, 40, 4, v => _ds.MinRadiusPx = v, v => v + " px");
+            AddSlider(tbl, "Max pad radius (px)", 10, 200, 45, v => _ds.MaxRadiusPx = v, v => v + " px");
+            AddSlider(tbl, "Core roundness", 15, 80, 35, v => _ds.CircMin = v / 100.0, v => (v / 100.0).ToString("0.00"));
             var cbRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
             var cbGold = new CheckBox { Text = "Gold pads", Checked = true, AutoSize = true };
             var cbWhite = new CheckBox { Text = "White/tinned pads", Checked = true, AutoSize = true };
@@ -171,10 +170,15 @@ namespace TestPointTrigger
 
         void SetMode(Mode m)
         {
-            _mode = m; _bPan.Checked = m == Mode.Pan; _bEdit.Checked = m == Mode.Edit; _bCrop.Checked = m == Mode.Crop;
+            // Entering Box mode clears the full-board auto-detections so you build
+            // your set region by region instead of starting from the flood.
+            if (m == Mode.Box && _detected.Count > 0) { _detected.Clear(); Rebuild(); }
+
+            _mode = m; _bPan.Checked = m == Mode.Pan; _bEdit.Checked = m == Mode.Edit; _bCrop.Checked = m == Mode.Crop; _bBox.Checked = m == Mode.Box;
             _canvas.Cursor = m == Mode.Pan ? Cursors.Hand : Cursors.Cross;
             SetStatus(m == Mode.Edit ? "Edit: left-click adds a pad (snaps to centre) · right-click removes · wheel zooms · middle-drag pans"
                     : m == Mode.Crop ? "Crop: drag a rectangle around the board (exclude battery label and bezel)"
+                    : m == Mode.Box ? "Box detect: drag a rectangle to detect pads only inside it. Each box adds to your set; Edit (E) to curate."
                     : "Pan: drag to move · wheel zooms");
         }
 
@@ -211,7 +215,7 @@ namespace TestPointTrigger
             Cv2.ImEncode(".png", m, out byte[] png);
             _mat?.Dispose(); _bmp?.Dispose();
             _mat = m; _bmp = new Bitmap(new MemoryStream(png)); _path = path;
-            _detected.Clear(); _manual.Clear(); _suppressed.Clear(); _undo.Clear(); _crop = null; _sel = -1;
+            _detected.Clear(); _manual.Clear(); _boxDetected.Clear(); _suppressed.Clear(); _undo.Clear(); _crop = null; _sel = -1;
             Text = $"TestPoint Trigger — {Path.GetFileName(path)}  v{AppVersion}";
             FitView(); RunDetect();
         }
@@ -238,9 +242,27 @@ namespace TestPointTrigger
             finally { UseWaitCursor = false; }
         }
 
+        // Detect only inside a dragged box and ADD the results to the running set.
+        async void RunBoxDetect(Rectangle box)
+        {
+            if (_mat == null) return;
+            var ds = _ds.Clone(); var mat = _mat;
+            var roi = new CvRect(box.X, box.Y, box.Width, box.Height);
+            SetStatus("Detecting in box…"); UseWaitCursor = true;
+            try
+            {
+                var res = await Task.Run(() => PadDetector.Detect(mat, ds, roi));
+                _boxDetected = PadDetector.Dedupe(_boxDetected.Concat(res).ToList());
+                Rebuild();
+                SetStatus($"Box: +{res.Count} pads · {_pads.Count} total. Drag another box, or Edit (E) to curate.");
+            }
+            catch (Exception ex) { SetStatus("Box detect failed: " + ex.Message); }
+            finally { UseWaitCursor = false; }
+        }
+
         void Rebuild()
         {
-            var det = _detected.Where(p => !_suppressed.Any(s => Dist(s, p) <= Math.Max(p.R, 3) + 2)).ToList();
+            var det = _detected.Concat(_boxDetected).Where(p => !_suppressed.Any(s => Dist(s, p) <= Math.Max(p.R, 3) + 2)).ToList();
             var all = PadDetector.Dedupe(det.Concat(_manual).ToList());
             var rs = all.Select(p => p.R).OrderBy(r => r).ToList();
             double band = rs.Count > 0 ? Math.Max(10, rs[rs.Count / 2] * 3) : 30;
@@ -306,6 +328,12 @@ namespace TestPointTrigger
                 using (var pen = new Pen(Color.DeepSkyBlue, 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash })
                     g.DrawRectangle(pen, a.X, a.Y, r.Width * _zoom, r.Height * _zoom);
             }
+            if (_boxDrag.HasValue)
+            {
+                var a = ToScreen(_boxDrag.Value.Location); var r = _boxDrag.Value;
+                using (var pen = new Pen(Color.LimeGreen, 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash })
+                    g.DrawRectangle(pen, a.X, a.Y, r.Width * _zoom, r.Height * _zoom);
+            }
         }
 
         void DimOutside(Graphics g, Rectangle c)
@@ -325,6 +353,7 @@ namespace TestPointTrigger
             { _panning = true; _dragStart = e.Location; _panOrigin = _off; return; }
             var ip = ToImage(e.Location);
             if (_mode == Mode.Crop && e.Button == MouseButtons.Left) { _dragStart = e.Location; _cropDrag = new Rectangle((int)ip.X, (int)ip.Y, 0, 0); return; }
+            if (_mode == Mode.Box && e.Button == MouseButtons.Left) { _dragStart = e.Location; _boxDrag = new Rectangle((int)ip.X, (int)ip.Y, 0, 0); return; }
             if (_mode != Mode.Edit) return;
 
             int hit = HitTest(ip);
@@ -367,6 +396,12 @@ namespace TestPointTrigger
                 _cropDrag = Rectangle.FromLTRB((int)Math.Min(a.X, b.X), (int)Math.Min(a.Y, b.Y), (int)Math.Max(a.X, b.X), (int)Math.Max(a.Y, b.Y));
                 _canvas.Invalidate();
             }
+            else if (_boxDrag.HasValue)
+            {
+                var a = ToImage(_dragStart); var b = ToImage(e.Location);
+                _boxDrag = Rectangle.FromLTRB((int)Math.Min(a.X, b.X), (int)Math.Min(a.Y, b.Y), (int)Math.Max(a.X, b.X), (int)Math.Max(a.Y, b.Y));
+                _canvas.Invalidate();
+            }
         }
 
         void CanvasUp(object sender, MouseEventArgs e)
@@ -376,6 +411,12 @@ namespace TestPointTrigger
             {
                 var r = Rectangle.Intersect(_cropDrag.Value, new Rectangle(0, 0, _bmp.Width, _bmp.Height)); _cropDrag = null;
                 if (r.Width > 20 && r.Height > 20) { _crop = r; SetMode(Mode.Edit); RunDetect(); }
+                _canvas.Invalidate();
+            }
+            else if (_boxDrag.HasValue)
+            {
+                var r = Rectangle.Intersect(_boxDrag.Value, new Rectangle(0, 0, _bmp.Width, _bmp.Height)); _boxDrag = null;
+                if (r.Width > 16 && r.Height > 16) RunBoxDetect(r);
                 _canvas.Invalidate();
             }
         }
@@ -395,6 +436,7 @@ namespace TestPointTrigger
             if (e.KeyCode == Keys.E) SetMode(Mode.Edit);
             else if (e.KeyCode == Keys.P || e.KeyCode == Keys.Space) SetMode(Mode.Pan);
             else if (e.KeyCode == Keys.C) SetMode(Mode.Crop);
+            else if (e.KeyCode == Keys.B) SetMode(Mode.Box);
             else if (e.KeyCode == Keys.F) FitView();
             else if (e.KeyCode == Keys.D) RunDetect();
             else if (e.KeyCode == Keys.Delete && _sel >= 0)
@@ -444,12 +486,14 @@ namespace TestPointTrigger
 
         void ShowHelp() => MessageBox.Show(this,
             "1. Open, drop or paste a top-down motherboard photo.\n" +
-            "2. Crop (C): drag around the board to exclude the battery label and bezel.\n" +
-            "3. Tune sliders if needed — missing pads: lower Min size / Roundness; false hits: raise them.\n" +
-            "4. Edit (E): left-click a missed pad to add it (snaps to its centre); right-click or Delete removes.\n" +
-            "   Removed auto-pads stay removed when you re-detect. Ctrl+Z undoes.\n" +
-            "5. Choose Labels only or Circles + labels, then Export PNG (upscaled) and CSV checklist.\n\n" +
-            "Keys: E edit · P/Space pan · C crop · F fit · D detect · wheel zoom · middle-drag pan.\n\n" +
+            "2. Box detect (B): drag a rectangle over one area to detect only its pads. Each box adds to your set —\n" +
+            "   sweep the board region by region to keep counts small and relevant. (Whole-board Detect is on 🔍 / D.)\n" +
+            "3. Crop (C): drag around the board to limit whole-board detection and exclude the bezel.\n" +
+            "4. Tune: Min/Max pad radius sets the size of blob to accept; Core roundness rejects trace-like shapes.\n" +
+            "5. Edit (E): left-click a missed pad to add it (snaps to its centre); right-click or Delete removes.\n" +
+            "   Removed pads stay removed when you re-detect. Ctrl+Z undoes.\n" +
+            "6. Choose Labels only or Circles + labels, then Export PNG (upscaled) and CSV checklist.\n\n" +
+            "Keys: E edit · B box detect · P/Space pan · C crop · F fit · D detect · wheel zoom · middle-drag pan.\n\n" +
             "Candidates only — confirm the real test point by probing.", "How to use");
     }
 

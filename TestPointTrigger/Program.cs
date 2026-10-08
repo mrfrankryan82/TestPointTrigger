@@ -20,6 +20,7 @@ namespace TestPointTrigger
             // writing an IModule and adding one line below - nothing in the
             // shell or in any other module needs to change.
             host.Register(new UsbTriggerModule());
+            host.Register(new PhoneJigModule());
             host.Register(new AdbFastbootModule());
             host.Register(new LiveCoachModule());
             host.Register(new PadFinderModule());
