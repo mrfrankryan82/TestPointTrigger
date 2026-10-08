@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
@@ -10,9 +10,9 @@
     <Company>HaKDMoDz™</Company>
     <Product>TestPoint Trigger</Product>
     <Copyright>© 2026 HaKDMoDz™</Copyright>
-    <Version>3.4.1</Version>
-    <FileVersion>3.4.1.0</FileVersion>
-    <AssemblyVersion>3.4.1.0</AssemblyVersion>
+    <Version>3.6.0</Version>
+    <FileVersion>3.6.0.0</FileVersion>
+    <AssemblyVersion>3.6.0.0</AssemblyVersion>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
@@ -31,6 +31,7 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.Extensions" Version="4.10.0.20241108" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="ClosedXML" Version="0.102.3" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>
