@@ -1,4 +1,4 @@
-// TestPoint Trigger - Pad Finder module
+﻿// TestPoint Trigger - Pad Finder module
 // Developer: HaKDMoDz™ · v3.0.0 · 2026-09-26
 using System;
 using System.Windows.Forms;
@@ -16,7 +16,7 @@ namespace TestPointTrigger.Modules
         public string Id => "padfinder";
         public string Title => "PCB Pad Finder";
         public string Description => "Find and label test pads on motherboard photos";
-        public string Version => "3.0.1";
+        public string Version => "3.1.0";
         public int SortOrder => 20;
 
         private MainForm _form;
