@@ -1,24 +1,33 @@
-# TestPoint Trigger — PCB Pad Finder (v2.0.0)
+# Mobile Surgery — Modular Bench Suite (v3.7.0)
 
-Finds candidate **gold and white/tinned solder test pads** on a motherboard photo, numbers them in reading order and exports a labelled image plus a CSV elimination checklist.
+A Windows bench toolkit for phone board work, built as one shell with pluggable modules. Formerly **TestPoint Trigger**.
 
-> v2.0.0 is a full rewrite. The v1.x USB hub disable/re-enable trigger is kept in git history (tag `v1-usb-trigger`).
+## Modules
+- **USB Hub Trigger** — disable a dedicated USB hub, then re-enable it on a global hotkey (Ctrl+Alt+E), voice command or countdown so the phone enumerates fresh in EDL/BROM while you hold the test point.
+- **Phone Jig** — front end for the Arduino Mega boot-mode jig: guided wiring checks with a live diagram, every jig command as a button, automatic per-phone profiling over ADB/fastboot, and the **Hardware History** tab (profile database + Google-Sheets-ready workbook export).
+- **ADB / Fastboot** — adb, fastboot, download-mode and recovery operations plus a raw command console.
+- **Live Coach** — camera + USB watcher that coaches boot-mode entry (vision is advisory, USB VID/PID detection is authoritative).
+- **PCB Pad Finder** — finds and numbers gold and white/tinned test pads on motherboard photos; exports a labelled PNG and CSV checklist.
+- **Repair DB** and **Tool Licences** — job history and tool-licence/expiry tracking.
+- **Logs** — one append-only log across sessions, with search, filters, live tail and integrity check.
 
-## Features
-- Detection ported from the HaKDMoDz test-point-pad-detector skill (OpenCV): gold HSV band + bright/unsaturated tinned mask, roundness filter, and rejection of screw holes/"O" glyphs, silkscreen text on the bezel, and pads embedded in shield metal.
-- Crop to board (exclude battery label/bezel) — detection runs only inside the crop.
-- Live tuning sliders (debounced re-detect).
-- Manual edits: left-click adds a pad that **snaps to its true centre**; right-click / Delete removes. Removed auto-pads stay removed after re-detect; duplicates merge automatically; Ctrl+Z undo.
-- Label placement tries 8 positions around each pad and never covers a pad or another label.
-- Styles: **Labels only** (pads untouched) or **Circles + labels**.
-- Export upscaled PNG (1–6×) with credit footer, and CSV (`id,x,y,radius,source,circularity,probed,notes`).
-- Open / drag-drop / paste (Ctrl+V); EXIF orientation of phone photos handled.
+## Restyling in Visual Studio Design View
+Every window, module page and dialog has a `.Designer.cs` file, so the whole UI can be edited visually:
 
-## Keys
-`E` edit · `P`/`Space` pan · `C` crop · `F` fit · `D` detect · wheel zoom · middle-drag pan · `Ctrl+Z` undo · `Ctrl+S` export PNG
+| What | Open in Design View |
+|---|---|
+| Shell (sidebar, logo, nav, header, footer) | `Modules/ModuleHostForm.cs` |
+| Module pages | `Modules/Views/*View.cs` |
+| PCB Pad Finder | `MainForm.cs` |
+| Dialogs | `Modules/LicenseEditForm.cs`, `Modules/RepairEditForm.cs`, `Modules/PromptForm.cs`, `HelpForm.cs` |
+
+What you set in the designer is what runs: the old runtime theme pass no longer overrides designer colours. Each module finds its controls by name, so rename a control only together with its module code. A few things are data-driven and created at runtime: the Phone Jig boot-mode buttons (they copy the look of the **OFF (all safe)** button), wiring-step rows, and grid rows.
+
+## Data
+Settings, logs and databases stay in `%LOCALAPPDATA%\TestPointTrigger` so data from earlier versions keeps loading. Device workbooks export to `My Drive\MobileSurgery` (Google Drive for desktop) or `Documents\MobileSurgery`.
 
 ## Build
-Visual Studio 2022 (or `dotnet build -c Release`), .NET Framework 4.8, x64. NuGet: OpenCvSharp4 + OpenCvSharp4.runtime.win.
+Visual Studio 2022+ or `dotnet build -c Release`; .NET Framework 4.8, x64. Output: `MobileSurgery.exe`. Run as Administrator for the USB Hub Trigger.
 
 ---
-Developer: **HaKDMoDz™** · v2.0.0 · 2026-09-23
+Developer: **HaKDMoDz™** · v3.7.0 · 2026-10-09

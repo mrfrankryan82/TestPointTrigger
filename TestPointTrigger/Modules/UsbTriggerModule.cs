@@ -1,4 +1,4 @@
-﻿// TestPoint Trigger - USB Hub Trigger module
+﻿// Mobile Surgery - USB Hub Trigger module
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
 using System;
 using System.Collections.Generic;
@@ -18,7 +18,7 @@ using TestPointTrigger.Modules.Views;
 namespace TestPointTrigger.Modules
 {
     /// <summary>
-    /// The original v1 TestPoint Trigger as a module: disable a USB hub or
+    /// The original v1 Mobile Surgery as a module: disable a USB hub or
     /// controller, hold the test point, then re-enable it on a global hotkey
     /// (or a fallback countdown) so the phone enumerates fresh in EDL/BROM.
     ///
@@ -496,7 +496,7 @@ namespace TestPointTrigger.Modules
             // Never leave a hub switched off because the app was closed.
             if (_disabledBySession.Count > 0 &&
                 MessageBox.Show(_disabledBySession.Count + " USB device(s) are still disabled by this app.\n\nRe-enable them before exiting?",
-                    "TestPoint Trigger", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                    "Mobile Surgery", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
             {
                 foreach (var id in _disabledBySession.ToList()) PnpUtil.Enable(id);
             }

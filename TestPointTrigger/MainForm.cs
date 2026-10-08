@@ -1,4 +1,4 @@
-﻿// TestPoint Trigger - PCB Pad Finder
+﻿// Mobile Surgery - PCB Pad Finder
 // Developer: HaKDMoDz™ · v2.0.0 · 2026-09-23
 using System;
 using System.Collections.Generic;
@@ -172,7 +172,7 @@ namespace TestPointTrigger
             _mat?.Dispose(); _bmp?.Dispose();
             _mat = m; _bmp = new Bitmap(new MemoryStream(png)); _path = path;
             _detected.Clear(); _manual.Clear(); _boxDetected.Clear(); _suppressed.Clear(); _undo.Clear(); _crop = null; _sel = -1;
-            Text = $"TestPoint Trigger — {Path.GetFileName(path)}  v{AppVersion}";
+            Text = $"Mobile Surgery — {Path.GetFileName(path)}  v{AppVersion}";
             FitView(); RunDetect();
         }
 

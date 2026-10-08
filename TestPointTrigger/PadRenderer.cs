@@ -1,4 +1,4 @@
-// TestPoint Trigger - PCB Pad Finder
+// Mobile Surgery - PCB Pad Finder
 // Developer: HaKDMoDz™ · v2.0.0 · 2026-09-23
 using System;
 using System.Collections.Generic;

@@ -1,4 +1,4 @@
-﻿// TestPoint Trigger - Device workbook export (.xlsx, one worksheet per phone) and model image lookup
+﻿// Mobile Surgery - Device workbook export (.xlsx, one worksheet per phone) and model image lookup
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-10-09
 using System;
 using System.Collections.Generic;
@@ -30,7 +30,7 @@ namespace TestPointTrigger.Modules
         {
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
             var h = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-            h.DefaultRequestHeaders.UserAgent.ParseAdd("TestPointTrigger/3.6 (bench tool; contact via GitHub mrfrankryan82)");
+            h.DefaultRequestHeaders.UserAgent.ParseAdd("MobileSurgery/3.7 (bench tool; contact via GitHub mrfrankryan82)");
             return h;
         }
 
@@ -171,9 +171,9 @@ namespace TestPointTrigger.Modules
                     BuildDeviceSheet(wb.Worksheets.Add(name), d, n);
                 }
                 BuildIndex(index, devices, sheets);
-                wb.Properties.Title = "TestPoint Trigger device workbook";
+                wb.Properties.Title = "Mobile Surgery device workbook";
                 wb.Properties.Author = AppInfo.DeveloperName;
-                wb.Properties.Comments = "Generated " + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + " by TestPoint Trigger";
+                wb.Properties.Comments = "Generated " + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + " by Mobile Surgery";
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 wb.SaveAs(path);
             }
@@ -194,7 +194,7 @@ namespace TestPointTrigger.Modules
 
         private static void BuildIndex(IXLWorksheet ws, IList<DeviceProfile> devices, Dictionary<string, string> sheets)
         {
-            ws.Cell(1, 1).Value = "TestPoint Trigger - device workbook";
+            ws.Cell(1, 1).Value = "Mobile Surgery - device workbook";
             ws.Cell(1, 1).Style.Font.Bold = true; ws.Cell(1, 1).Style.Font.FontSize = 16;
             ws.Cell(2, 1).Value = "Generated " + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + " · " + AppInfo.DeveloperName + " · v" + AppInfo.VersionText;
             var hdr = new[] { "Device", "Brand", "Model", "Serial", "Chip family", "Applicable modes", "Android", "Image match", "Last seen", "Sheet" };

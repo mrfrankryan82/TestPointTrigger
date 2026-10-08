@@ -1,4 +1,4 @@
-﻿// TestPoint Trigger - Jig wiring assistant: port scan, serial link, guided checks, wiring diagram
+﻿// Mobile Surgery - Jig wiring assistant: port scan, serial link, guided checks, wiring diagram
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-10-09
 using System;
 using System.Collections.Generic;

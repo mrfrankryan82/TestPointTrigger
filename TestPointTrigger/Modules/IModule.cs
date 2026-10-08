@@ -1,4 +1,4 @@
-// TestPoint Trigger - Module contract
+// Mobile Surgery - Module contract
 // Developer: HaKDMoDz™ · v2.1.0 · 2026-09-26
 using System;
 using System.Windows.Forms;
@@ -6,7 +6,7 @@ using System.Windows.Forms;
 namespace TestPointTrigger.Modules
 {
     /// <summary>
-    /// Contract every TestPoint Trigger module implements. The host
+    /// Contract every Mobile Surgery module implements. The host
     /// discovers modules, shows them in its navigation, and owns their
     /// lifecycle. A module never assumes it is the only one loaded, and
     /// never blocks the UI thread in Activate/Deactivate.

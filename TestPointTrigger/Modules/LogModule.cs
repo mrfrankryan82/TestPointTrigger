@@ -1,4 +1,4 @@
-﻿// TestPoint Trigger - Log viewer / query module
+﻿// Mobile Surgery - Log viewer / query module
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
 using System;
 using System.Collections.Generic;

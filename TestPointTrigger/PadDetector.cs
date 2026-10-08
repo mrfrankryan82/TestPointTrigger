@@ -1,4 +1,4 @@
-// TestPoint Trigger - PCB Pad Finder detector (distance-transform core)
+// Mobile Surgery - PCB Pad Finder detector (distance-transform core)
 // Developer: HaKDMoDz™ · v2.2.0 · 2026-09-26
 using System;
 using System.Collections.Generic;

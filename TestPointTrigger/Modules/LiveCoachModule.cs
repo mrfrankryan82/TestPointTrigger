@@ -1,4 +1,4 @@
-﻿// TestPoint Trigger - Live Coach module
+﻿// Mobile Surgery - Live Coach module
 // Developer: HaKDMoDz™ · v1.2.0 · 2026-09-26
 using System;
 using System.Drawing;

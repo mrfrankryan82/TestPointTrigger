@@ -1,4 +1,4 @@
-﻿// TestPoint Trigger - Phone Jig module: Mega jig control, wiring verification, auto device profiling, workbook export
+﻿// Mobile Surgery - Phone Jig module: Mega jig control, wiring verification, auto device profiling, workbook export
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-10-09
 using System;
 using System.Collections.Generic;
@@ -449,7 +449,7 @@ namespace TestPointTrigger.Modules
         private void SaveReport()
         {
             var sb = new StringBuilder();
-            sb.AppendLine("TestPoint Trigger - jig wiring report").AppendLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "  " + AppInfo.DeveloperName);
+            sb.AppendLine("Mobile Surgery - jig wiring report").AppendLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "  " + AppInfo.DeveloperName);
             sb.AppendLine("Jig: " + (_link.Ident ?? "not connected")).AppendLine(Summary()).AppendLine();
             foreach (var s in _steps)
                 sb.AppendLine("[" + s.State.ToString().ToUpperInvariant().PadRight(7) + "] " + s.Group + " / " + s.Title).AppendLine("          " + s.Detail);
@@ -751,14 +751,14 @@ namespace TestPointTrigger.Modules
                 {
                     if (!dr.IsReady) continue;
                     string p = Path.Combine(dr.RootDirectory.FullName, "My Drive");
-                    if (Directory.Exists(p)) return Path.Combine(p, "TestPointTrigger");
+                    if (Directory.Exists(p)) return Path.Combine(p, "MobileSurgery");
                 }
                 string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 foreach (var n in new[] { "My Drive", "Google Drive" })
-                    if (Directory.Exists(Path.Combine(home, n))) return Path.Combine(home, n, "TestPointTrigger");
+                    if (Directory.Exists(Path.Combine(home, n))) return Path.Combine(home, n, "MobileSurgery");
             }
             catch { }
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TestPointTrigger");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MobileSurgery");
         }
 
         private void ExportWorkbook(bool openDrive)

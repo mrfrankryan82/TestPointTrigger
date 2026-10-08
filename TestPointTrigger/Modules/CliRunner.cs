@@ -1,4 +1,4 @@
-// TestPoint Trigger - console process runner (adb / fastboot / heimdall)
+﻿// Mobile Surgery - console process runner (adb / fastboot / heimdall)
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-09-26
 using System;
 using System.Diagnostics;
@@ -120,24 +120,8 @@ namespace TestPointTrigger.Modules
     {
         public static string Text(System.Windows.Forms.IWin32Window owner, string message, string title, string def = "")
         {
-            using (var f = new System.Windows.Forms.Form
-            {
-                Text = title,
-                StartPosition = System.Windows.Forms.FormStartPosition.CenterParent,
-                FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
-                MinimizeBox = false, MaximizeBox = false,
-                ClientSize = new System.Drawing.Size(430, 130),
-                Font = new System.Drawing.Font("Segoe UI", 9f)
-            })
-            {
-                var lbl = new System.Windows.Forms.Label { Text = message, AutoSize = true, Location = new System.Drawing.Point(12, 12), MaximumSize = new System.Drawing.Size(406, 0) };
-                var tb = new System.Windows.Forms.TextBox { Text = def, Location = new System.Drawing.Point(12, 50), Width = 406 };
-                var ok = new System.Windows.Forms.Button { Text = "OK", DialogResult = System.Windows.Forms.DialogResult.OK, Location = new System.Drawing.Point(242, 90), Width = 80 };
-                var cancel = new System.Windows.Forms.Button { Text = "Cancel", DialogResult = System.Windows.Forms.DialogResult.Cancel, Location = new System.Drawing.Point(330, 90), Width = 80 };
-                f.Controls.AddRange(new System.Windows.Forms.Control[] { lbl, tb, ok, cancel });
-                f.AcceptButton = ok; f.CancelButton = cancel;
-                return f.ShowDialog(owner) == System.Windows.Forms.DialogResult.OK ? tb.Text : null;
-            }
+            using (var f = new PromptForm(message, title, def))
+                return f.ShowDialog(owner) == System.Windows.Forms.DialogResult.OK ? f.Value : null;
         }
     }
 }

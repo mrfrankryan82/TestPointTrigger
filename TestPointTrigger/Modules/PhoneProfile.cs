@@ -1,4 +1,4 @@
-﻿// TestPoint Trigger - Phone profile model, store, chipset->mode map and ADB/fastboot probe
+﻿// Mobile Surgery - Phone profile model, store, chipset->mode map and ADB/fastboot probe
 // Developer: HaKDMoDz™ · v1.0.0 · 2026-10-09
 using System;
 using System.Collections.Generic;

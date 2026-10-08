@@ -1,4 +1,4 @@
-// TestPoint Trigger - Phone Jig view (layout lives in PhoneJigView.Designer.cs; behaviour in PhoneJigModule)
+// Mobile Surgery - Phone Jig view (layout lives in PhoneJigView.Designer.cs; behaviour in PhoneJigModule)
 // Developer: HaKDMoDz™ · v3.7.0 · 2026-10-09
 using System.Windows.Forms;
 

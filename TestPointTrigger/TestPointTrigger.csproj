@@ -5,14 +5,14 @@
     <PlatformTarget>x64</PlatformTarget>
     <LangVersion>latest</LangVersion>
     <RootNamespace>TestPointTrigger</RootNamespace>
-    <AssemblyName>TestPointTrigger</AssemblyName>
-    <AssemblyTitle>TestPoint Trigger - Modular Bench Suite</AssemblyTitle>
+    <AssemblyName>MobileSurgery</AssemblyName>
+    <AssemblyTitle>Mobile Surgery - Modular Bench Suite</AssemblyTitle>
     <Company>HaKDMoDz™</Company>
-    <Product>TestPoint Trigger</Product>
+    <Product>Mobile Surgery</Product>
     <Copyright>© 2026 HaKDMoDz™</Copyright>
-    <Version>3.6.0</Version>
-    <FileVersion>3.6.0.0</FileVersion>
-    <AssemblyVersion>3.6.0.0</AssemblyVersion>
+    <Version>3.7.0</Version>
+    <FileVersion>3.7.0.0</FileVersion>
+    <AssemblyVersion>3.7.0.0</AssemblyVersion>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
@@ -33,5 +33,86 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="ClosedXML" Version="0.102.3" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Designer support: each form/view opens in Design View; its .Designer.cs nests under it. -->
+    <Compile Update="MainForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="MainForm.Designer.cs">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </Compile>
+    <Compile Update="HelpForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="HelpForm.Designer.cs">
+      <DependentUpon>HelpForm.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\ModuleHostForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Modules\ModuleHostForm.Designer.cs">
+      <DependentUpon>ModuleHostForm.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\LicenseEditForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Modules\LicenseEditForm.Designer.cs">
+      <DependentUpon>LicenseEditForm.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\RepairEditForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Modules\RepairEditForm.Designer.cs">
+      <DependentUpon>RepairEditForm.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\PromptForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Modules\PromptForm.Designer.cs">
+      <DependentUpon>PromptForm.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\Views\PhoneJigView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Modules\Views\PhoneJigView.Designer.cs">
+      <DependentUpon>PhoneJigView.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\Views\UsbTriggerView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Modules\Views\UsbTriggerView.Designer.cs">
+      <DependentUpon>UsbTriggerView.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\Views\AdbFastbootView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Modules\Views\AdbFastbootView.Designer.cs">
+      <DependentUpon>AdbFastbootView.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\Views\LiveCoachView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Modules\Views\LiveCoachView.Designer.cs">
+      <DependentUpon>LiveCoachView.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\Views\LogView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Modules\Views\LogView.Designer.cs">
+      <DependentUpon>LogView.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\Views\LicenseView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Modules\Views\LicenseView.Designer.cs">
+      <DependentUpon>LicenseView.cs</DependentUpon>
+    </Compile>
+    <Compile Update="Modules\Views\RepairDbView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Modules\Views\RepairDbView.Designer.cs">
+      <DependentUpon>RepairDbView.cs</DependentUpon>
+    </Compile>
   </ItemGroup>
 </Project>

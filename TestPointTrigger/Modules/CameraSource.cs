@@ -1,4 +1,4 @@
-// TestPoint Trigger - Camera source abstraction
+// Mobile Surgery - Camera source abstraction
 // Developer: HaKDMoDz™ · v3.1.0 · 2026-09-26
 using System;
 using OpenCvSharp;
