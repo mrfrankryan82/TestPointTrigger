@@ -31,6 +31,7 @@ namespace TestPointTrigger
         public static readonly Color Text = C("#EAF2F8");
         public static readonly Color Muted = C("#8695A6");
         public static readonly Color Muted2 = C("#5D6B7A");
+        public static readonly Color Ink = C("#101822");     // dark text for light surfaces (tool strips)
 
         public static Font Base => new Font("Segoe UI", 9.5f);
         public static Font Title => Rounded(21f, FontStyle.Bold);
@@ -153,6 +154,14 @@ namespace TestPointTrigger
                 case TabControl _:
                     if (IsDefault(c.BackColor, SystemColors.Control)) c.BackColor = Bg;
                     if (IsDefault(c.ForeColor, SystemColors.ControlText)) c.ForeColor = Text;
+                    break;
+
+                case ToolStrip ts:   // also MenuStrip / StatusStrip
+                    // Strips keep their light system background, but would otherwise inherit the
+                    // near-white Text colour from the dark panel around them and become unreadable.
+                    ts.ForeColor = Ink;
+                    foreach (ToolStripItem it in ts.Items)
+                        if (IsDefault(it.ForeColor, SystemColors.ControlText) || it.ForeColor.ToArgb() == Text.ToArgb()) it.ForeColor = Ink;
                     break;
 
                 default:

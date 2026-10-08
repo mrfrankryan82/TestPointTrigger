@@ -82,14 +82,24 @@ namespace TestPointTrigger.Modules
             // Elevation banner - pnputil cannot touch device nodes without admin.
             var banner = Flow();
             banner.BackColor = Color.FromArgb(255, 244, 206);
+            banner.ForeColor = Color.FromArgb(74, 48, 0);      // dark brown text on the pale-yellow banner
             banner.Padding = new Padding(6);
             banner.Visible = !_elevated;
-            var bRestart = new Button { Text = "Restart as Administrator", AutoSize = true };
+            // Explicit colours so the dark theme (which only restyles default-coloured
+            // controls) doesn't hand this button the banner's pale background + light text.
+            var bRestart = new Button
+            {
+                Text = "Restart as Administrator", AutoSize = true,
+                FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(150, 82, 0), ForeColor = Color.White,
+                Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold), Padding = new Padding(6, 2, 6, 2)
+            };
+            bRestart.FlatAppearance.BorderColor = Color.FromArgb(110, 58, 0);
+            bRestart.FlatAppearance.MouseOverBackColor = Color.FromArgb(175, 98, 0);
             bRestart.Click += (s, e) => RelaunchElevated();
             banner.Controls.Add(new Label
             {
                 Text = "Not running as Administrator — disabling/enabling hubs needs admin rights.",
-                AutoSize = true, Margin = new Padding(0, 8, 8, 0)
+                AutoSize = true, Margin = new Padding(0, 8, 8, 0), ForeColor = Color.FromArgb(74, 48, 0)
             });
             banner.Controls.Add(bRestart);
 
