@@ -1,5 +1,5 @@
-// TestPoint Trigger - Phone Jig module: Mega jig control, wiring verification, auto device profiling, workbook export
-// Developer: HaKDMoDz™ · v1.0.0 · 2026-10-09
+// TestPoint Trigger - Phone Jig module: Uno/Mega jig control, wiring verification, auto device profiling, workbook export
+// Developer: HaKDMoDz™ · v1.1.0 · 2026-10-09
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -14,7 +14,7 @@ using Newtonsoft.Json;
 namespace TestPointTrigger.Modules
 {
     /// <summary>
-    /// Front end for the Arduino Mega phone boot-mode jig.
+    /// Front end for the Arduino (Uno or Mega 2560) phone boot-mode jig.
     ///   Wiring  : guided build checklist with live electrical checks and a colour-coded diagram.
     ///   Jig     : every serial command of the sketch as buttons.
     ///   Device  : autonomous per-phone profiling on first ADB/fastboot connection (cached by serial).
@@ -24,8 +24,8 @@ namespace TestPointTrigger.Modules
     {
         public string Id => "phonejig";
         public string Title => "Phone Jig";
-        public string Description => "Mega boot-mode jig: wiring verification, auto device profiling, per-device workbook.";
-        public string Version => "1.0.0";
+        public string Description => "Uno / Mega boot-mode jig: wiring verification, auto device profiling, per-device workbook.";
+        public string Version => "1.1.0";
         public int SortOrder => 12;
 
         private const int Baud = 115200;
@@ -36,6 +36,8 @@ namespace TestPointTrigger.Modules
         private readonly JigLink _link = new JigLink();
         private readonly ProfileStore _store = new ProfileStore();
         private CheckCtx _ctx;
+        private BoardPins _pins = BoardPins.Mega;   // which board the wiring guide describes
+        private ComboBox _board;
 
         // top bar / console
         private ComboBox _ports;
@@ -76,8 +78,9 @@ namespace TestPointTrigger.Modules
         public Control CreateView(IModuleHost host)
         {
             _host = host;
-            _ctx = new CheckCtx { Link = _link, Log = Log };
-            _steps = WiringGuide.Build();
+            _pins = BoardPins.For(LoadSettings().Board == "Uno" ? JigBoard.Uno : JigBoard.Mega);
+            _ctx = new CheckCtx { Link = _link, Log = Log, Pins = _pins };
+            _steps = WiringGuide.Build(_pins);
             _link.Line += OnJigLine;
 
             var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(6) };
@@ -113,10 +116,15 @@ namespace TestPointTrigger.Modules
             _ports = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330 };
             _btnConnect = Btn("Connect", ToggleConnect);
             _linkStatus = new Label { AutoSize = true, Margin = new Padding(8, 7, 0, 0), Text = "Not connected" };
+            _board = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+            _board.Items.AddRange(new object[] { BoardPins.Uno.Name, BoardPins.Mega.Name });
+            _board.SelectedIndex = _pins.Board == JigBoard.Uno ? 0 : 1;
+            _board.SelectedIndexChanged += (s, e) => SetBoard(_board.SelectedIndex == 0 ? JigBoard.Uno : JigBoard.Mega);
             bar.Controls.AddRange(new Control[]
             {
-                new Label { Text = "Jig port:", AutoSize = true, Margin = new Padding(0, 7, 4, 0) }, _ports,
-                Btn("Rescan ports", () => RefreshPorts(false)), Btn("Auto-detect Mega", AutoDetectMega), _btnConnect,
+                new Label { Text = "Board:", AutoSize = true, Margin = new Padding(0, 7, 4, 0) }, _board,
+                new Label { Text = "Jig port:", AutoSize = true, Margin = new Padding(8, 7, 4, 0) }, _ports,
+                Btn("Rescan ports", () => RefreshPorts(false)), Btn("Auto-detect jig", AutoDetectJig), _btnConnect,
                 new Label { Text = "115200 8N1", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(8, 7, 0, 0) }, _linkStatus
             });
             return bar;
@@ -151,7 +159,7 @@ namespace TestPointTrigger.Modules
 
         private void OnJigLine(string l)
         {
-            // Raw lines from the Mega. Keep them out of the file log; it would be mostly UART noise.
+            // Raw lines from the jig. Keep them out of the file log; it would be mostly UART noise.
             UI(() =>
             {
                 if (_console == null || _console.IsDisposed) return;
@@ -162,7 +170,7 @@ namespace TestPointTrigger.Modules
 
         private void Cmd(string c)
         {
-            if (!_link.IsOpen) { Log("[not connected to the Mega]"); return; }
+            if (!_link.IsOpen) { Log("[not connected to the jig]"); return; }
             Log("> " + c);
             _link.Send(c);
         }
@@ -185,7 +193,7 @@ namespace TestPointTrigger.Modules
                     if (!quiet)
                     {
                         var ard = list.Where(p => p.LooksArduino).ToList();
-                        Log(ard.Count > 0 ? "Arduino-type ports: " + string.Join("; ", ard.Select(p => p.ToString())) : "No Arduino-type USB serial port found. Plug the Mega in (USB-B).");
+                        Log(ard.Count > 0 ? "Arduino-type ports: " + string.Join("; ", ard.Select(p => p.ToString())) : "No Arduino-type USB serial port found. Plug the Uno or Mega in with a data USB cable.");
                     }
                 });
             });
@@ -208,23 +216,23 @@ namespace TestPointTrigger.Modules
             {
                 bool ok = TryPort(info.Port, out string why);
                 _connecting = false;
-                UI(() => { SetLinkStatus(); });
+                UI(() => { SetLinkStatus(); if (ok) FollowFirmwareBoard(); });
                 Log(ok ? "Jig firmware found on " + info.Port + ": " + _link.Ident : "Not connected: " + why);
             });
         }
 
-        // Open a port, wait for the Mega's reset-on-open, and ask it to identify itself.
+        // Open a port, wait for the board's reset-on-open, and ask it to identify itself.
         private bool TryPort(string port, out string why)
         {
             if (!_link.Open(port, Baud, out string err)) { why = err; return false; }
             System.Threading.Thread.Sleep(2300);
-            if (_link.Handshake()) { why = null; SaveSettings(port); return true; }
+            if (_link.Handshake()) { why = null; SaveSettings(port, null); return true; }
             string reason = "port opened but the sketch did not answer 'ident' (not uploaded, v2.0 firmware, or wrong board)";
             _link.Close();
             why = reason; return false;
         }
 
-        private void AutoDetectMega()
+        private void AutoDetectJig()
         {
             if (_connecting) return;
             _connecting = true;
@@ -240,8 +248,8 @@ namespace TestPointTrigger.Modules
                     if (TryPort(p.Port, out _)) { found = p; break; }
                 }
                 _connecting = false;
-                UI(() => { if (found != null) _ports.SelectedItem = _ports.Items.Cast<SerialPortInfo>().FirstOrDefault(x => x.Port == found.Port); SetLinkStatus(); });
-                Log(found != null ? "Found the jig on " + found.Port + ": " + _link.Ident : "No port answered as the jig. Check the cable and that PhoneBootController_Mega v2.1.0 is uploaded.");
+                UI(() => { if (found != null) { _ports.SelectedItem = _ports.Items.Cast<SerialPortInfo>().FirstOrDefault(x => x.Port == found.Port); FollowFirmwareBoard(); } SetLinkStatus(); });
+                Log(found != null ? "Found the jig on " + found.Port + ": " + _link.Ident : "No port answered as the jig. Check the cable and that PhoneBootController_Uno or _Mega v2.2.0 (repo firmware/ folder) is uploaded.");
             });
         }
 
@@ -274,22 +282,65 @@ namespace TestPointTrigger.Modules
                 if (_link.IsOpen && gone.Contains(_link.PortName))
                 {
                     _link.Close(); UI(SetLinkStatus);
-                    Log("The jig port " + gone.First() + " disappeared (cable pulled or Mega reset).");
+                    Log("The jig port " + gone.First() + " disappeared (cable pulled or board reset).");
                     _host?.Notify("Jig serial port disappeared.", ModuleSeverity.Warning);
                 }
                 if (added.Count > 0 && !first)
                 {
-                    Log("New serial port: " + string.Join(", ", added) + ". Press Auto-detect Mega.");
+                    Log("New serial port: " + string.Join(", ", added) + ". Press Auto-detect jig.");
                     RefreshPorts(true);
                 }
                 else if (first) RefreshPorts(true);
             });
         }
 
-        private class Settings { public string LastPort { get; set; } }
-        private void SaveSettings(string port)
+        private class Settings { public string LastPort { get; set; } public string Board { get; set; } }
+
+        private Settings LoadSettings()
         {
-            try { Directory.CreateDirectory(AppLog.Dir); File.WriteAllText(SettingsPath, JsonConvert.SerializeObject(new Settings { LastPort = port })); } catch { }
+            try { if (File.Exists(SettingsPath)) return JsonConvert.DeserializeObject<Settings>(File.ReadAllText(SettingsPath)) ?? new Settings(); }
+            catch { }
+            return new Settings();
+        }
+
+        // Pass null to keep the stored value for that field.
+        private void SaveSettings(string port, string board)
+        {
+            try
+            {
+                var cur = LoadSettings();
+                if (port != null) cur.LastPort = port;
+                if (board != null) cur.Board = board;
+                Directory.CreateDirectory(AppLog.Dir);
+                File.WriteAllText(SettingsPath, JsonConvert.SerializeObject(cur));
+            }
+            catch { }
+        }
+
+        // ───────────────────────────── board (Uno / Mega) ─────────────────────────────
+
+        /// <summary>When the firmware says which board it is, make the wiring guide match.</summary>
+        private void FollowFirmwareBoard()
+        {
+            var b = _link.Board;
+            if (b == null || b == _pins.Board) return;
+            Log("Firmware reports the " + BoardPins.For(b.Value).Name + " build - switching the wiring guide to it.");
+            _board.SelectedIndex = b == JigBoard.Uno ? 0 : 1;   // fires SetBoard
+        }
+
+        private void SetBoard(JigBoard b)
+        {
+            if (_pins.Board == b && _steps != null && _stepList != null && _stepList.Items.Count > 0) return;
+            if (_wiringBusy) { Log("Wait for the running check to finish before changing board."); return; }
+            _pins = BoardPins.For(b);
+            _ctx.Pins = _pins;
+            _ctx.SelfTest.Clear(); _ctx.SelfTestAt = DateTime.MinValue;
+            _steps = WiringGuide.Build(_pins);
+            _diagram.SetBoard(_pins);
+            _diagram.SetSteps(_steps);
+            PopulateStepList();
+            SaveSettings(null, b.ToString());
+            Log("Wiring guide set to " + _pins.Name + ".");
         }
 
         // ───────────────────────────── Wiring tab ─────────────────────────────
@@ -299,6 +350,7 @@ namespace TestPointTrigger.Modules
             var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterDistance = 700 };
 
             _diagram = new WiringPanel { Dock = DockStyle.Fill };
+            _diagram.SetBoard(_pins);
             _diagram.SetSteps(_steps);
             _diagram.NodeClicked += id =>
             {
@@ -314,14 +366,6 @@ namespace TestPointTrigger.Modules
 
             _stepList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false };
             _stepList.Columns.Add("", 26); _stepList.Columns.Add("Step", 300); _stepList.Columns.Add("Test", 52);
-            var groups = new Dictionary<string, ListViewGroup>();
-            foreach (var s in _steps)
-            {
-                if (!groups.TryGetValue(s.Group, out var g)) { g = new ListViewGroup(s.Group); groups[s.Group] = g; _stepList.Groups.Add(g); }
-                var it = new ListViewItem("o", g) { Tag = s };
-                it.SubItems.Add(s.Title); it.SubItems.Add(s.HasCheck ? "auto" : "manual");
-                _stepList.Items.Add(it);
-            }
             _stepList.SelectedIndexChanged += (s, e) => ShowStep();
             right.Controls.Add(_stepList, 0, 0);
 
@@ -341,9 +385,25 @@ namespace TestPointTrigger.Modules
             right.Controls.Add(btns, 0, 2);
             split.Panel2.Controls.Add(right);
 
+            PopulateStepList();
+            return split;
+        }
+
+        private void PopulateStepList()
+        {
+            _stepList.BeginUpdate();
+            _stepList.Items.Clear(); _stepList.Groups.Clear();
+            var groups = new Dictionary<string, ListViewGroup>();
+            foreach (var s in _steps)
+            {
+                if (!groups.TryGetValue(s.Group, out var g)) { g = new ListViewGroup(s.Group); groups[s.Group] = g; _stepList.Groups.Add(g); }
+                var it = new ListViewItem("o", g) { Tag = s };
+                it.SubItems.Add(s.Title); it.SubItems.Add(s.HasCheck ? "auto" : "manual");
+                _stepList.Items.Add(it);
+            }
+            _stepList.EndUpdate();
             if (_stepList.Items.Count > 0) _stepList.Items[0].Selected = true;
             RefreshSteps();
-            return split;
         }
 
         private WiringStep SelectedStep => _stepList.SelectedItems.Count > 0 ? _stepList.SelectedItems[0].Tag as WiringStep : null;
@@ -407,7 +467,7 @@ namespace TestPointTrigger.Modules
 
         private async Task RunStepAsync(WiringStep s)
         {
-            if (!_link.IsOpen) { SetStep(s, StepState.Fail, "Not connected to the Mega."); return; }
+            if (!_link.IsOpen) { SetStep(s, StepState.Fail, "Not connected to the jig."); return; }
             _wiringBusy = true; UI(ShowStep);
             await Task.Run(() =>
             {
@@ -424,7 +484,7 @@ namespace TestPointTrigger.Modules
         private async void RunAllGuided()
         {
             if (_wiringBusy) return;
-            if (!_link.IsOpen) { Log("Connect to the Mega first."); return; }
+            if (!_link.IsOpen) { Log("Connect to the jig first."); return; }
             foreach (var s in _steps)
             {
                 if (!s.HasCheck) continue;
@@ -455,7 +515,7 @@ namespace TestPointTrigger.Modules
         {
             var sb = new StringBuilder();
             sb.AppendLine("TestPoint Trigger - jig wiring report").AppendLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "  " + AppInfo.DeveloperName);
-            sb.AppendLine("Jig: " + (_link.Ident ?? "not connected")).AppendLine(Summary()).AppendLine();
+            sb.AppendLine("Board: " + _pins.Name + "   Jig: " + (_link.Ident ?? "not connected")).AppendLine(Summary()).AppendLine();
             foreach (var s in _steps)
                 sb.AppendLine("[" + s.State.ToString().ToUpperInvariant().PadRight(7) + "] " + s.Group + " / " + s.Title).AppendLine("          " + s.Detail);
             Directory.CreateDirectory(AppLog.Dir);
@@ -493,7 +553,7 @@ namespace TestPointTrigger.Modules
             foreach (var c in new[] { "ident", "pins", "sense", "selftest", "status", "help" }) { var cc = c; chk.Controls.Add(Btn(cc, () => Cmd(cc))); }
 
             var pw = Row("Power and USB");
-            foreach (var c in new[] { "usb pc", "usb shield", "usb off", "vcc on", "vcc off", "btemp on", "btemp off" }) { var cc = c; pw.Controls.Add(Btn(cc, () => Cmd(cc))); }
+            foreach (var c in new[] { "usb pc", "usb off", "vcc on", "vcc off", "btemp on", "btemp off" }) { var cc = c; pw.Controls.Add(Btn(cc, () => Cmd(cc))); }
 
             var keys = Row("Manual pad lines (open-drain)");
             foreach (var k in new[] { "tp", "up", "dn", "pwr" })
@@ -503,7 +563,7 @@ namespace TestPointTrigger.Modules
                 keys.Controls.Add(Btn(kk + " rel", () => Cmd("key " + kk + " rel")));
             }
 
-            var ua = Row("Phone UART (Serial1)");
+            var ua = Row("Phone UART");
             var tb = new TextBox { Width = 220 };
             var trig = new TextBox { Width = 200 };
             ua.Controls.AddRange(new Control[]
@@ -515,10 +575,9 @@ namespace TestPointTrigger.Modules
                 Btn("set trigger", () => { if (trig.Text.Length > 0) Cmd("trigger " + trig.Text); }), Btn("clear", () => Cmd("trigger off"))
             });
 
-            var adb = Row("ADB through the host shield");
-            var at = new TextBox { Width = 260, Text = "getprop ro.product.model" };
-            adb.Controls.AddRange(new Control[] { at, Btn("adb (via shield)", () => Cmd("adb " + at.Text)) });
-            adb.Controls.Add(new Label { Text = "runs 'normal' first so the phone boots and the USB path goes to the shield", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(8, 7, 0, 0) });
+            var adb = Row("ADB");
+            adb.Controls.Add(new Label { Text = "Jig firmware 2.2.0 has no host shield. Run a boot mode (e.g. 'normal'), then use the ADB / Fastboot module - the phone's USB goes to the PC.", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(4, 7, 0, 0) });
+            adb.Controls.Add(Btn("Open ADB / Fastboot", () => _host?.Navigate("adbfastboot")));
 
             var tune = Row("Tune a mode (RAM only)");
             var mode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };

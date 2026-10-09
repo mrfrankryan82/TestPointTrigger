@@ -10,9 +10,9 @@
     <Company>HaKDMoDz™</Company>
     <Product>TestPoint Trigger</Product>
     <Copyright>© 2026 HaKDMoDz™</Copyright>
-    <Version>3.6.0</Version>
-    <FileVersion>3.6.0.0</FileVersion>
-    <AssemblyVersion>3.6.0.0</AssemblyVersion>
+    <Version>3.7.0</Version>
+    <FileVersion>3.7.0.0</FileVersion>
+    <AssemblyVersion>3.7.0.0</AssemblyVersion>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
