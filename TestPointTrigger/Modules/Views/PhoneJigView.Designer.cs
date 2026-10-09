@@ -46,6 +46,8 @@ namespace TestPointTrigger.Modules.Views
             historyGridCell.WrapMode = System.Windows.Forms.DataGridViewTriState.False;
             this.tlpRoot = new System.Windows.Forms.TableLayoutPanel();
             this.flpTopBar = new System.Windows.Forms.FlowLayoutPanel();
+            this.lblBoard = new System.Windows.Forms.Label();
+            this.cboBoard = new System.Windows.Forms.ComboBox();
             this.lblJigPort = new System.Windows.Forms.Label();
             this.cboPorts = new System.Windows.Forms.ComboBox();
             this.btnRescanPorts = new System.Windows.Forms.Button();
@@ -87,7 +89,6 @@ namespace TestPointTrigger.Modules.Views
             this.grpPower = new System.Windows.Forms.GroupBox();
             this.flpPower = new System.Windows.Forms.FlowLayoutPanel();
             this.btnUsbPc = new System.Windows.Forms.Button();
-            this.btnUsbShield = new System.Windows.Forms.Button();
             this.btnUsbOff = new System.Windows.Forms.Button();
             this.btnVccOn = new System.Windows.Forms.Button();
             this.btnVccOff = new System.Windows.Forms.Button();
@@ -116,10 +117,9 @@ namespace TestPointTrigger.Modules.Views
             this.txtTrigger = new System.Windows.Forms.TextBox();
             this.btnSetTrigger = new System.Windows.Forms.Button();
             this.btnClearTrigger = new System.Windows.Forms.Button();
-            this.grpAdbShield = new System.Windows.Forms.GroupBox();
-            this.flpAdbShield = new System.Windows.Forms.FlowLayoutPanel();
-            this.txtAdbCmd = new System.Windows.Forms.TextBox();
-            this.btnAdbViaShield = new System.Windows.Forms.Button();
+            this.grpAdb = new System.Windows.Forms.GroupBox();
+            this.flpAdb = new System.Windows.Forms.FlowLayoutPanel();
+            this.btnOpenAdb = new System.Windows.Forms.Button();
             this.lblAdbHint = new System.Windows.Forms.Label();
             this.grpTune = new System.Windows.Forms.GroupBox();
             this.flpTune = new System.Windows.Forms.FlowLayoutPanel();
@@ -207,8 +207,8 @@ namespace TestPointTrigger.Modules.Views
             this.flpPads.SuspendLayout();
             this.grpUart.SuspendLayout();
             this.flpUart.SuspendLayout();
-            this.grpAdbShield.SuspendLayout();
-            this.flpAdbShield.SuspendLayout();
+            this.grpAdb.SuspendLayout();
+            this.flpAdb.SuspendLayout();
             this.grpTune.SuspendLayout();
             this.flpTune.SuspendLayout();
             this.grpRaw.SuspendLayout();
@@ -245,6 +245,8 @@ namespace TestPointTrigger.Modules.Views
             // 
             // flpTopBar
             // 
+            this.flpTopBar.Controls.Add(this.lblBoard);
+            this.flpTopBar.Controls.Add(this.cboBoard);
             this.flpTopBar.Controls.Add(this.lblJigPort);
             this.flpTopBar.Controls.Add(this.cboPorts);
             this.flpTopBar.Controls.Add(this.btnRescanPorts);
@@ -258,12 +260,30 @@ namespace TestPointTrigger.Modules.Views
             this.flpTopBar.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(234)))), ((int)(((byte)(242)))), ((int)(((byte)(248)))));
             this.flpTopBar.Name = "flpTopBar";
             // 
+            // lblBoard
+            // 
+            this.lblBoard.AutoSize = true;
+            this.lblBoard.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(134)))), ((int)(((byte)(149)))), ((int)(((byte)(166)))));
+            this.lblBoard.Text = "Board:";
+            this.lblBoard.Margin = new System.Windows.Forms.Padding(0, 7, 4, 0);
+            this.lblBoard.Name = "lblBoard";
+            // 
+            // cboBoard
+            // 
+            this.cboBoard.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(18)))), ((int)(((byte)(32)))));
+            this.cboBoard.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cboBoard.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.cboBoard.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(234)))), ((int)(((byte)(242)))), ((int)(((byte)(248)))));
+            this.cboBoard.FormattingEnabled = true;
+            this.cboBoard.Size = new System.Drawing.Size(140, 25);
+            this.cboBoard.Name = "cboBoard";
+            // 
             // lblJigPort
             // 
             this.lblJigPort.AutoSize = true;
             this.lblJigPort.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(134)))), ((int)(((byte)(149)))), ((int)(((byte)(166)))));
             this.lblJigPort.Text = "Jig port:";
-            this.lblJigPort.Margin = new System.Windows.Forms.Padding(0, 7, 4, 0);
+            this.lblJigPort.Margin = new System.Windows.Forms.Padding(8, 7, 4, 0);
             this.lblJigPort.Name = "lblJigPort";
             // 
             // cboPorts
@@ -298,7 +318,7 @@ namespace TestPointTrigger.Modules.Views
             this.btnAutoDetect.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(95)))), ((int)(((byte)(220)))), ((int)(((byte)(242)))));
             this.btnAutoDetect.Margin = new System.Windows.Forms.Padding(3);
             this.btnAutoDetect.Padding = new System.Windows.Forms.Padding(4, 2, 4, 2);
-            this.btnAutoDetect.Text = "Auto-detect Mega";
+            this.btnAutoDetect.Text = "Auto-detect jig";
             this.btnAutoDetect.UseVisualStyleBackColor = false;
             this.btnAutoDetect.Name = "btnAutoDetect";
             this.btnAutoDetect.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(27)))), ((int)(((byte)(58)))), ((int)(((byte)(75)))));
@@ -562,7 +582,7 @@ namespace TestPointTrigger.Modules.Views
             this.flpJig.Controls.Add(this.grpPower);
             this.flpJig.Controls.Add(this.grpPads);
             this.flpJig.Controls.Add(this.grpUart);
-            this.flpJig.Controls.Add(this.grpAdbShield);
+            this.flpJig.Controls.Add(this.grpAdb);
             this.flpJig.Controls.Add(this.grpTune);
             this.flpJig.Controls.Add(this.grpRaw);
             this.flpJig.AutoSize = false;
@@ -738,7 +758,6 @@ namespace TestPointTrigger.Modules.Views
             // flpPower
             // 
             this.flpPower.Controls.Add(this.btnUsbPc);
-            this.flpPower.Controls.Add(this.btnUsbShield);
             this.flpPower.Controls.Add(this.btnUsbOff);
             this.flpPower.Controls.Add(this.btnVccOn);
             this.flpPower.Controls.Add(this.btnVccOff);
@@ -764,21 +783,6 @@ namespace TestPointTrigger.Modules.Views
             this.btnUsbPc.Name = "btnUsbPc";
             this.btnUsbPc.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(27)))), ((int)(((byte)(58)))), ((int)(((byte)(75)))));
             this.btnUsbPc.FlatAppearance.MouseOverBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(26)))), ((int)(((byte)(40)))));
-            // 
-            // btnUsbShield
-            // 
-            this.btnUsbShield.AutoSize = true;
-            this.btnUsbShield.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(18)))), ((int)(((byte)(32)))));
-            this.btnUsbShield.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnUsbShield.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(95)))), ((int)(((byte)(220)))), ((int)(((byte)(242)))));
-            this.btnUsbShield.Margin = new System.Windows.Forms.Padding(3);
-            this.btnUsbShield.Padding = new System.Windows.Forms.Padding(4, 2, 4, 2);
-            this.btnUsbShield.Text = "usb shield";
-            this.btnUsbShield.UseVisualStyleBackColor = false;
-            this.btnUsbShield.Tag = "usb shield";
-            this.btnUsbShield.Name = "btnUsbShield";
-            this.btnUsbShield.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(27)))), ((int)(((byte)(58)))), ((int)(((byte)(75)))));
-            this.btnUsbShield.FlatAppearance.MouseOverBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(26)))), ((int)(((byte)(40)))));
             // 
             // btnUsbOff
             // 
@@ -1007,7 +1011,7 @@ namespace TestPointTrigger.Modules.Views
             this.grpUart.Controls.Add(this.flpUart);
             this.grpUart.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(11)))), ((int)(((byte)(17)))));
             this.grpUart.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(234)))), ((int)(((byte)(242)))), ((int)(((byte)(248)))));
-            this.grpUart.Text = "Phone UART (Serial1)";
+            this.grpUart.Text = "Phone UART";
             this.grpUart.AutoSize = true;
             this.grpUart.Padding = new System.Windows.Forms.Padding(6);
             this.grpUart.Size = new System.Drawing.Size(900, 60);
@@ -1174,56 +1178,46 @@ namespace TestPointTrigger.Modules.Views
             this.btnClearTrigger.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(27)))), ((int)(((byte)(58)))), ((int)(((byte)(75)))));
             this.btnClearTrigger.FlatAppearance.MouseOverBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(26)))), ((int)(((byte)(40)))));
             // 
-            // grpAdbShield
+            // grpAdb
             // 
-            this.grpAdbShield.Controls.Add(this.flpAdbShield);
-            this.grpAdbShield.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(11)))), ((int)(((byte)(17)))));
-            this.grpAdbShield.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(234)))), ((int)(((byte)(242)))), ((int)(((byte)(248)))));
-            this.grpAdbShield.Text = "ADB through the host shield";
-            this.grpAdbShield.AutoSize = true;
-            this.grpAdbShield.Padding = new System.Windows.Forms.Padding(6);
-            this.grpAdbShield.Size = new System.Drawing.Size(900, 60);
-            this.grpAdbShield.Name = "grpAdbShield";
+            this.grpAdb.Controls.Add(this.flpAdb);
+            this.grpAdb.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(11)))), ((int)(((byte)(17)))));
+            this.grpAdb.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(234)))), ((int)(((byte)(242)))), ((int)(((byte)(248)))));
+            this.grpAdb.Text = "ADB";
+            this.grpAdb.AutoSize = true;
+            this.grpAdb.Padding = new System.Windows.Forms.Padding(6);
+            this.grpAdb.Size = new System.Drawing.Size(900, 60);
+            this.grpAdb.Name = "grpAdb";
             // 
-            // flpAdbShield
+            // flpAdb
             // 
-            this.flpAdbShield.Controls.Add(this.txtAdbCmd);
-            this.flpAdbShield.Controls.Add(this.btnAdbViaShield);
-            this.flpAdbShield.Controls.Add(this.lblAdbHint);
-            this.flpAdbShield.AutoSize = true;
-            this.flpAdbShield.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(11)))), ((int)(((byte)(17)))));
-            this.flpAdbShield.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.flpAdbShield.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(234)))), ((int)(((byte)(242)))), ((int)(((byte)(248)))));
-            this.flpAdbShield.Name = "flpAdbShield";
+            this.flpAdb.Controls.Add(this.btnOpenAdb);
+            this.flpAdb.Controls.Add(this.lblAdbHint);
+            this.flpAdb.AutoSize = true;
+            this.flpAdb.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(8)))), ((int)(((byte)(11)))), ((int)(((byte)(17)))));
+            this.flpAdb.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.flpAdb.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(234)))), ((int)(((byte)(242)))), ((int)(((byte)(248)))));
+            this.flpAdb.Name = "flpAdb";
             // 
-            // txtAdbCmd
+            // btnOpenAdb
             // 
-            this.txtAdbCmd.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(18)))), ((int)(((byte)(32)))));
-            this.txtAdbCmd.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.txtAdbCmd.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(234)))), ((int)(((byte)(242)))), ((int)(((byte)(248)))));
-            this.txtAdbCmd.Size = new System.Drawing.Size(260, 24);
-            this.txtAdbCmd.Text = "getprop ro.product.model";
-            this.txtAdbCmd.Name = "txtAdbCmd";
-            // 
-            // btnAdbViaShield
-            // 
-            this.btnAdbViaShield.AutoSize = true;
-            this.btnAdbViaShield.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(18)))), ((int)(((byte)(32)))));
-            this.btnAdbViaShield.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnAdbViaShield.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(95)))), ((int)(((byte)(220)))), ((int)(((byte)(242)))));
-            this.btnAdbViaShield.Margin = new System.Windows.Forms.Padding(3);
-            this.btnAdbViaShield.Padding = new System.Windows.Forms.Padding(4, 2, 4, 2);
-            this.btnAdbViaShield.Text = "adb (via shield)";
-            this.btnAdbViaShield.UseVisualStyleBackColor = false;
-            this.btnAdbViaShield.Name = "btnAdbViaShield";
-            this.btnAdbViaShield.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(27)))), ((int)(((byte)(58)))), ((int)(((byte)(75)))));
-            this.btnAdbViaShield.FlatAppearance.MouseOverBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(26)))), ((int)(((byte)(40)))));
+            this.btnOpenAdb.AutoSize = true;
+            this.btnOpenAdb.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(18)))), ((int)(((byte)(32)))));
+            this.btnOpenAdb.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnOpenAdb.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(95)))), ((int)(((byte)(220)))), ((int)(((byte)(242)))));
+            this.btnOpenAdb.Margin = new System.Windows.Forms.Padding(3);
+            this.btnOpenAdb.Padding = new System.Windows.Forms.Padding(4, 2, 4, 2);
+            this.btnOpenAdb.Text = "Open ADB / Fastboot";
+            this.btnOpenAdb.UseVisualStyleBackColor = false;
+            this.btnOpenAdb.Name = "btnOpenAdb";
+            this.btnOpenAdb.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(27)))), ((int)(((byte)(58)))), ((int)(((byte)(75)))));
+            this.btnOpenAdb.FlatAppearance.MouseOverBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(26)))), ((int)(((byte)(40)))));
             // 
             // lblAdbHint
             // 
             this.lblAdbHint.AutoSize = true;
             this.lblAdbHint.ForeColor = System.Drawing.Color.DimGray;
-            this.lblAdbHint.Text = "runs 'normal' first so the phone boots and the USB path goes to the shield";
+            this.lblAdbHint.Text = "Jig firmware 2.2.0 has no host shield: run a boot mode (e.g. normal), then use the ADB / Fastboot module - the phone's USB goes to the PC.";
             this.lblAdbHint.Margin = new System.Windows.Forms.Padding(8, 7, 0, 0);
             this.lblAdbHint.Name = "lblAdbHint";
             // 
@@ -1962,10 +1956,10 @@ namespace TestPointTrigger.Modules.Views
             this.flpTune.PerformLayout();
             this.grpTune.ResumeLayout(false);
             this.grpTune.PerformLayout();
-            this.flpAdbShield.ResumeLayout(false);
-            this.flpAdbShield.PerformLayout();
-            this.grpAdbShield.ResumeLayout(false);
-            this.grpAdbShield.PerformLayout();
+            this.flpAdb.ResumeLayout(false);
+            this.flpAdb.PerformLayout();
+            this.grpAdb.ResumeLayout(false);
+            this.grpAdb.PerformLayout();
             this.flpUart.ResumeLayout(false);
             this.flpUart.PerformLayout();
             this.grpUart.ResumeLayout(false);
@@ -2015,6 +2009,8 @@ namespace TestPointTrigger.Modules.Views
 
         internal System.Windows.Forms.TableLayoutPanel tlpRoot;
         internal System.Windows.Forms.FlowLayoutPanel flpTopBar;
+        internal System.Windows.Forms.Label lblBoard;
+        internal System.Windows.Forms.ComboBox cboBoard;
         internal System.Windows.Forms.Label lblJigPort;
         internal System.Windows.Forms.ComboBox cboPorts;
         internal System.Windows.Forms.Button btnRescanPorts;
@@ -2056,7 +2052,6 @@ namespace TestPointTrigger.Modules.Views
         internal System.Windows.Forms.GroupBox grpPower;
         internal System.Windows.Forms.FlowLayoutPanel flpPower;
         internal System.Windows.Forms.Button btnUsbPc;
-        internal System.Windows.Forms.Button btnUsbShield;
         internal System.Windows.Forms.Button btnUsbOff;
         internal System.Windows.Forms.Button btnVccOn;
         internal System.Windows.Forms.Button btnVccOff;
@@ -2085,10 +2080,9 @@ namespace TestPointTrigger.Modules.Views
         internal System.Windows.Forms.TextBox txtTrigger;
         internal System.Windows.Forms.Button btnSetTrigger;
         internal System.Windows.Forms.Button btnClearTrigger;
-        internal System.Windows.Forms.GroupBox grpAdbShield;
-        internal System.Windows.Forms.FlowLayoutPanel flpAdbShield;
-        internal System.Windows.Forms.TextBox txtAdbCmd;
-        internal System.Windows.Forms.Button btnAdbViaShield;
+        internal System.Windows.Forms.GroupBox grpAdb;
+        internal System.Windows.Forms.FlowLayoutPanel flpAdb;
+        internal System.Windows.Forms.Button btnOpenAdb;
         internal System.Windows.Forms.Label lblAdbHint;
         internal System.Windows.Forms.GroupBox grpTune;
         internal System.Windows.Forms.FlowLayoutPanel flpTune;

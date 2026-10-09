@@ -10,9 +10,9 @@
     <Company>HaKDMoDz™</Company>
     <Product>Mobile Surgery</Product>
     <Copyright>© 2026 HaKDMoDz™</Copyright>
-    <Version>3.7.0</Version>
-    <FileVersion>3.7.0.0</FileVersion>
-    <AssemblyVersion>3.7.0.0</AssemblyVersion>
+    <Version>3.7.1</Version>
+    <FileVersion>3.7.1.0</FileVersion>
+    <AssemblyVersion>3.7.1.0</AssemblyVersion>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
