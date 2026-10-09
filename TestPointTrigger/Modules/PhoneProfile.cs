@@ -44,7 +44,7 @@ namespace TestPointTrigger.Modules
                 .Where(s => !string.IsNullOrWhiteSpace(s)));
     }
 
-    /// <summary>One boot mode the Mega jig can drive (mirrors the sketch's mode table).</summary>
+    /// <summary>One boot mode the Uno/Mega jig can drive (mirrors the sketch's mode table).</summary>
     public sealed class ModeInfo
     {
         public string Name, Keys, Usb, SoftwareCmd, Note;
@@ -63,7 +63,7 @@ namespace TestPointTrigger.Modules
             new ModeInfo("bootloader", "Vol+ + Vol- + Power",   "PC",     "adb reboot bootloader", "Vendor bootloader menus."),
             new ModeInfo("download",   "Vol+ + Vol-",           "PC",     "adb reboot download",   "Samsung Odin / LG / Unisoc download."),
             new ModeInfo("recovery",   "Vol+ + Power",          "PC",     "adb reboot recovery",   "Recovery."),
-            new ModeInfo("normal",     "Power",                 "Shield", "",                      "Normal boot; USB handed to the host shield for ADB."),
+            new ModeInfo("normal",     "Power",                 "PC",     "",                      "Normal boot; USB to the PC for ADB."),
         };
 
         public static ModeInfo Get(string name) =>

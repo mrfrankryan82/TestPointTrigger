@@ -15,10 +15,12 @@ def build(out):
         return flow(name, kids)
 
     topbar = flow("flpTopBar", [
-        lbl("lblJigPort", "Jig port:", Margin=pad(0, 7, 4, 0)),
+        lbl("lblBoard", "Board:", Margin=pad(0, 7, 4, 0)),
+        cbo("cboBoard", Size=size(140, 25)),
+        lbl("lblJigPort", "Jig port:", Margin=pad(8, 7, 4, 0)),
         cbo("cboPorts", Size=size(330, 25)),
         btn("btnRescanPorts", "Rescan ports"),
-        btn("btnAutoDetect", "Auto-detect Mega"),
+        btn("btnAutoDetect", "Auto-detect jig"),
         btn("btnConnect", "Connect"),
         lbl("lblBaud", "115200 8N1", fore=DIMGRAY, Margin=pad(8, 7, 0, 0)),
         lbl("lblLinkStatus", "Not connected", Margin=pad(8, 7, 0, 0)),
@@ -51,7 +53,7 @@ def build(out):
         cmd("btnCmdIdent", "ident", "ident"), cmd("btnCmdPins", "pins", "pins"), cmd("btnCmdSense", "sense", "sense"),
         cmd("btnCmdSelftest", "selftest", "selftest"), cmd("btnCmdStatus", "status", "status"), cmd("btnCmdHelp", "help", "help")]))
     g3 = grp("grpPower", "Power and USB", gflow("flpPower", [
-        cmd("btnUsbPc", "usb pc", "usb pc"), cmd("btnUsbShield", "usb shield", "usb shield"), cmd("btnUsbOff", "usb off", "usb off"),
+        cmd("btnUsbPc", "usb pc", "usb pc"), cmd("btnUsbOff", "usb off", "usb off"),
         cmd("btnVccOn", "vcc on", "vcc on"), cmd("btnVccOff", "vcc off", "vcc off"),
         cmd("btnBtempOn", "btemp on", "btemp on"), cmd("btnBtempOff", "btemp off", "btemp off")]))
     keys_ = []
@@ -59,16 +61,16 @@ def build(out):
         keys_.append(cmd("btnKey%sHold" % nm, k + " hold", "key %s hold" % k))
         keys_.append(cmd("btnKey%sRel" % nm, k + " rel", "key %s rel" % k))
     g4 = grp("grpPads", "Manual pad lines (open-drain)", gflow("flpPads", keys_))
-    g5 = grp("grpUart", "Phone UART (Serial1)", gflow("flpUart", [
+    g5 = grp("grpUart", "Phone UART", gflow("flpUart", [
         cmd("btnUartOn", "uart on", "uart on"), cmd("btnUartOff", "uart off", "uart off"),
         cmd("btnUartBaud", "baud 115200", "uart baud 115200"), cmd("btnUartLoop", "loop test", "uart loop"),
         cmd("btnUartListen", "listen 3 s", "uart listen 3000"),
         tb("txtUartSend", 220), btn("btnUartSend", "send"),
         lbl("lblTrigger", "release lines on:", Margin=pad(12, 7, 2, 0)), tb("txtTrigger", 200),
         btn("btnSetTrigger", "set trigger"), cmd("btnClearTrigger", "clear", "trigger off")]))
-    g6 = grp("grpAdbShield", "ADB through the host shield", gflow("flpAdbShield", [
-        tb("txtAdbCmd", 260, "getprop ro.product.model"), btn("btnAdbViaShield", "adb (via shield)"),
-        lbl("lblAdbHint", "runs 'normal' first so the phone boots and the USB path goes to the shield",
+    g6 = grp("grpAdb", "ADB", gflow("flpAdb", [
+        btn("btnOpenAdb", "Open ADB / Fastboot"),
+        lbl("lblAdbHint", "Jig firmware 2.2.0 has no host shield: run a boot mode (e.g. normal), then use the ADB / Fastboot module - the phone's USB goes to the PC.",
             fore=DIMGRAY, Margin=pad(8, 7, 0, 0))]))
     g7 = grp("grpTune", "Tune a mode (RAM only)", gflow("flpTune", [
         cbo("cboTuneMode", Size=size(110, 25)),
